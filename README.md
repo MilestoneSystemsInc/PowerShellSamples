@@ -56,6 +56,8 @@ This repository contains sample PowerShell scripts for managing and automating t
 
 In order to make the most out of MilestonePSTools you will need at least some basic familiarity with PowerShell or other shells. It's possible to perform very basic actions in a few lines of PowerShell with limited experience. With a bit more experience and ambition, it's also possible to develop extensive and powerfull tools or entire modules to automate important business and maintenance tasks unique to your organization.
 
+[![IMAGE ALT TEXT](http://img.youtube.com/vi/qZ-I-Imm7tk/0.jpg)](http://www.youtube.com/watch?v=qZ-I-Imm7tk "MilestonePSTools Demo")
+
 If you're new to PowerShell, there are a wide range of resources available to learn. One popular example is the [Learn Windows PowerShell in a Month of Lunches](https://www.youtube.com/playlist?list=PL6D474E721138865A) series which, while last updated in 2014, is still a good resource for picking up the syntax and style.
 
 ### Prerequisites
