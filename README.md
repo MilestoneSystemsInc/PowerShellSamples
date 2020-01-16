@@ -70,7 +70,7 @@ MilestonePSTools is developed using the latest build of Milestone's MIP SDK. As 
 
 ### Installation
 
-You can install MilestonePSTools on the computer where your Milestone VMS is installed, but that is not required. In fact, from a security standpoint it is best to avoid installing software on the same server as your VMS if it's not necessary. Just as the XProtect Smart Client and Management Client may be used from a networked PC, so to can MilestonePSTools be used from a remote system.
+You can install MilestonePSTools on the computer where your Milestone VMS is installed, but that is not required. In fact, from a security standpoint it is best to avoid installing software on the same server as your VMS if it's not necessary. Just as the XProtect Smart Client and Management Client may be used from a networked PC, so too can MilestonePSTools be used from a remote system.
 
 1. Check PowerShell Execution Policy and consider switching to RemoteSigned if currently set to 'Restricted'
 ```powershell
