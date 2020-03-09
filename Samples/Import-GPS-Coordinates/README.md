@@ -1,18 +1,21 @@
 <br />
 <p align="center">
-  <a href="https://github.com/MilestoneSystemsInc/PowerShellSamples">
+  <a href="https://youtu.be/o5XK-WZRZYY">
     <img src="Import-GpsCoordinates.png" alt="Logo" width="800">
   </a>
 
-  <h3 align="center">Import-GpsCoordinates</h3>
+  <h2 align="center">Import-GpsCoordinates</h3>
 
   <p align="center">
     Update the GPS coordinates of cameras in Milestone based on a CSV file
   </p>
 </p>
 
+### Demo
 
-## Get-Help Import-GpsCoordinates -Full
+See [This demo](https://youtu.be/o5XK-WZRZYY) on YouTube where a simplified version of this sample is written and demonstrated from scratch.
+
+### Get-Help Import-GpsCoordinates -Full
 
 ```powershell
 NAME
