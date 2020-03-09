@@ -15,9 +15,11 @@
 
 See [This demo](https://youtu.be/o5XK-WZRZYY) on YouTube where a simplified version of this sample is written and demonstrated from scratch.
 
-### Get-Help Import-GpsCoordinates -Full
+### Documentation
 
 ```powershell
+PS C:\demo> Get-Help Import-GpsCoordinates -Full
+
 NAME
     Import-GpsCoordinates
     
