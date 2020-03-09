@@ -1,14 +1,10 @@
 <br />
 <p align="center">
+  <h2 align="center">Import-GpsCoordinates</h3>
+  <p align="center">Update the GPS coordinates of cameras in Milestone based on a CSV file</p>
   <a href="https://youtu.be/o5XK-WZRZYY">
     <img src="Import-GpsCoordinates.png" alt="Logo" width="800">
   </a>
-
-  <h2 align="center">Import-GpsCoordinates</h3>
-
-  <p align="center">
-    Update the GPS coordinates of cameras in Milestone based on a CSV file
-  </p>
 </p>
 
 ### Demo
