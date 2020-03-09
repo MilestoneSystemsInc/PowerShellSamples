@@ -1,7 +1,7 @@
 <br />
 <p align="center">
   <a href="https://github.com/MilestoneSystemsInc/PowerShellSamples">
-    <img src="Import-GpsCoordinates.png" alt="Logo" width="128">
+    <img src="Import-GpsCoordinates.png" alt="Logo" width="800">
   </a>
 
   <h3 align="center">Import-GpsCoordinates</h3>
