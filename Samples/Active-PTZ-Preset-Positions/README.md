@@ -14,6 +14,11 @@ $InformationPreference = 'Continue'
 # Select all cameras with at least one PTZ preset position
 $cameras = Get-Hardware | Where-Object Enabled | Get-Camera | Where-Object { $_.Enabled -and $_.PtzPresetFolder.PtzPresets.Count -gt 0 }
 
+# This is "dot sourcing" where we call an external script. In this case we're just
+# loading the Invoke-PtzPreset function. We'll assume the Invoke-PtzPreset.ps1 file
+# is in the same folder as this script.
+. .\Invoke-PtzPreset.ps1
+
 foreach ($camera in $cameras) {
 
     foreach ($ptzPreset in $camera.PtzPresetFolder.PtzPresets) {
