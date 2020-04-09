@@ -88,172 +88,67 @@ Install-Module MilestonePSTools -Scope CurrentUser
 
 <!-- USAGE EXAMPLES -->
 ## Usage
+### Get connected
+* Connect with the current Windows user
+    ```powershell
+    Connect-ManagementServer -Server myvms -AcceptEula
+    ```
+* Connect with a Windows or Active Directory user
+    ```powershell
+    Connect-ManagementServer -Server myvms -Credential (Get-Credential) -AcceptEula
+    ```
+* Connect with a Milestone Basic User
+    ```powershell
+    Connect-ManagementServer -Server myvms -Credential (Get-Credential) -BasicUser -AcceptEula
+    ```
 
-The examples provided in this repository will demonstrate the usage of MilestonePSTools. However, most cmdlets require that you use `Connect-ManagementServer` to establish a login session with your VMS Management Server.
-
+### List all enabled cameras
 ```powershell
+# Slower but uses Configuration API so each object can be used to modify configuration
+Get-Hardware | Where-Object Enabled | Get-Camera | Where-Object Enabled | Select Name
 
-NAME
-    Connect-ManagementServer
-    
-SYNOPSIS
-    Connects to a Milestone XProtect VMS Management Server
-    
-    
-SYNTAX
-    Connect-ManagementServer [[-Server] <string>] [[-Credential] <PSCredential>] [[-BasicUser] <SwitchParameter>] 
-    [[-AcceptEula] <SwitchParameter>] [[-IncludeChildSites] <SwitchParameter>] [[-WcfProxyTimeoutSeconds] <int>] 
-    [-Port <int>] [<CommonParameters>]
-    
-    
-DESCRIPTION
-    The Connect-ManagementServer cmdlet is the first cmdlet used when working with MilestonePSTools to explore or 
-    modify a Milestone XProtect VMS.
-    
-    Authentication methods include Windows, Active Directory, or Basic users, and Milestone Federated Architecture is 
-    supported when using anything besides Basic authentication. The state of the session with the Management Server 
-    will be maintained in the background for the duration of the PowerShell session, or until 
-    Disconnect-ManagementServer is used.
-    
-    By default, this cmdlet will only authenticate with the Management Server provided in the -Server parameter. If 
-    child sites need to be accessed during the same session, you should supply the -IncludeChildSites switch, and use 
-    the Select-Site cmdlet to switch between sites
-    
-    Note: If you do not supply a Credential object, the current Windows user will be used for authentication 
-    automatically.
-    
+# Faster but provides limited access to camera properties and Items cannot be used to modify configuration
+Get-PlatformItem -Kind (Get-Kind -List | ? DisplayName -eq Camera).Kind | Select Name
+```
 
-PARAMETERS
-    -Server <string>
-        Specifies, as an IP, hostname, or FQDN, the address of the Milestone XProtect Management Server.
-        
-        Required?                    false
-        Position?                    1
-        Default value                localhost
-        Accept pipeline input?       false
-        Accept wildcard characters?  false
-        
-    -Port <int>
-        Specifies, as an integer between 1-65535, the HTTP port of the Management Server. Default is 80.
-        
-        Note: When using basic authentication and a custom HTTP port on the Management Server, leave this value alone. 
-        MIP SDK will automatically use HTTPS on port 443.
-        
-        Required?                    false
-        Position?                    named
-        Default value                80
-        Accept pipeline input?       false
-        Accept wildcard characters?  false
-        
-    -Credential <PSCredential>
-        Specifies the username and password of either a Windows/AD or Milestone-specific Basic user. If the 
-        credentials are for a basic user, you must also supply the -BasicUser switch parameter. If this Credential 
-        parameter is omitted, the current Windows user credentials running the PowerShell session will be used by 
-        default.
-        
-        Required?                    false
-        Position?                    2
-        Default value                
-        Accept pipeline input?       false
-        Accept wildcard characters?  false
-        
-    -BasicUser <SwitchParameter>
-        Uses Basic User authentication. Use only to authenticate Basic Users which are users specific to Milestone and 
-        do not correspond to a Windows or Active Directory user account.
-        
-        Required?                    false
-        Position?                    5
-        Default value                False
-        Accept pipeline input?       false
-        Accept wildcard characters?  false
-        
-    -AcceptEula <SwitchParameter>
-        Acknowledge you have read and accept the end-user license agreement for the redistributable MIP SDK package
-        
-        Required?                    false
-        Position?                    6
-        Default value                False
-        Accept pipeline input?       false
-        Accept wildcard characters?  false
-        
-    -IncludeChildSites <SwitchParameter>
-        Authenticates with the supplied Management Server, and all child Management Servers in a given Milestone 
-        Federated Architecture tree.
-        
-        Required?                    false
-        Position?                    7
-        Default value                False
-        Accept pipeline input?       false
-        Accept wildcard characters?  false
-        
-    -WcfProxyTimeoutSeconds <int>
-        Specifies, as an integer value representing seconds, the maximum timeout value for any Milestone Configuration 
-        API operation.
-        
-        The Configuration API utilizes Windows Communication Foundation to establish a secure communication channel, 
-        and provides extensive access to Milestone XProtect VMS configuration elements.
-        
-        Most operations should complete very quickly, but in some environments it is possible for operations to take 
-        several minutes to complete.
-        
-        Default value is 300 seconds, or 5 minute.-
-        
-        Required?                    false
-        Position?                    8
-        Default value                300
-        Accept pipeline input?       false
-        Accept wildcard characters?  false
-        
-    <CommonParameters>
-        This cmdlet supports the common parameters: Verbose, Debug,
-        ErrorAction, ErrorVariable, WarningAction, WarningVariable,
-        OutBuffer, PipelineVariable, and OutVariable. For more information, see 
-        about_CommonParameters (https:/go.microsoft.com/fwlink/?LinkID=113216). 
+### Add hardware
+* Using Add-Hardware
+    ```powershell
+    # Select a Recording Server by name
+    $recorder = Get-RecordingServer -Name Artemis
     
-INPUTS
+    # Add a StableFPS device (if the driver is installed) using the default hardware name
+    $hardware1 = Add-Hardware -RecordingServer $recorder -Address http://192.168.1.101:1001 -UseDefaultCredentials -DriverId 5000 -GroupPath /StableFPS
     
-OUTPUTS
+    # Add a camera without specifying the driver, name it 'New Camera' and place it in a Camera Group named 'New Cameras'
+    $hardware2 = Add-Hardware -RecordingServer $recorder -Name 'New Camera' -Address http://192.168.1.102 -UserName root -Password notpass -GroupPath '/New Cameras'
     
-    ----------  EXAMPLE 1  ----------
+    # Enable all camera channels on $hardware2
+    foreach ($camera in $hardware2 | Get-Camera) {
+        $camera.Enabled = $true
+        $camera.Save()
+    }
+    ```
+* Using Import-HardwareCsv\
+hardware.csv
+    ```
+    "HardwareName","HardwareAddress","UserName","Password"
+    "Reception","http://192.168.1.102","root","notpass"
+    "Shipping","http://192.168.1.103","root","notpass"
+    "Parking","http://192.168.1.104","root","notpass"
+    ```
     
-    C:\PS>Connect-ManagementServer -Server mgtsrv1
-    
-    This command authenticates with a server named mgtsrv1 where the server is listening on HTTP port 80, and it uses 
-    the current PowerShell user context.
-    
-    If you have opened PowerShell normally, as your current Windows user, then the credentials used will be that of 
-    your current Windows user.
-    
-    If you have opened PowerShell as a different user (shift-right-click, run as a different user), OR you are 
-    executing your script as a scheduled task, the user context will be that of whichever user account was used to 
-    start the PowerShell session.
-    
-    
-    
-    ----------  EXAMPLE 2  ----------
-    
-    C:\PS>Connect-ManagementServer -Server mgtsrv1 -Credential (Get-Credential)
-    
-    This command will prompt the user for a username and password, then authenticates with a server named mgtsrv1 
-    where the server is listening on HTTP port 80 using Windows authentication.
-    
-    
-    
-    ----------  EXAMPLE 3  ----------
-    
-    C:\PS>Connect-ManagementServer -Server mgtsrv1 -Credential (Get-Credential) -BasicUser
-    
-    This command authenticates with a server named mgtsrv1 where the server is listening on HTTPS port 443, and it 
-    authenticates a basic user using the credentials supplied in the Get-Credential pop-up
-    
-    Note: As a "Basic User", the user will not have access to child sites in a Milestone Federated Architecture and 
-    thus the -IncludeChildSites switch will not have any effect.
-    
-    
-    
-    
-RELATED LINKS
+    ```powershell
+    $recorder = Get-RecordingServer -Name Artemis
+    Import-HardwareCsv -Path hardware.csv -RecordingServer $recorder
+    ```
 
+### Save a live snapshot from all cameras
+```powershell
+$cameras = Get-Hardware | ? Enabled | Get-Camera | ? Enabled
+foreach ($camera in $cameras) {
+    $null = Get-Snapshot -Camera $camera -Live -Save -Path C:\demo\snapshots -UseFriendlyName -LocalTimestamp
+}
 ```
 
 <!-- ROADMAP -->
