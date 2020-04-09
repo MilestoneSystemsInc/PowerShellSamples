@@ -1,4 +1,9 @@
 ## Scheduled Video Export
+
+<a href="https://youtu.be/qGCep6XjXmc">
+    <img src="ScheduledVideoExport.png" alt="Logo" width="800">
+</a>
+
 In this sample we will use the Register-ScheduledJob cmdlet included in PowerShell to create a
 scheduled task in Windows which runs our export script every day at midnight.
 
