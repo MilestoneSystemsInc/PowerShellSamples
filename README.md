@@ -77,6 +77,11 @@ You can install MilestonePSTools on the computer where your Milestone VMS is ins
 Get-ExecutionPolicy
 Set-ExecutionPolicy RemoteSigned
 ```
+1b. Microsoft have improved security on their PSGallery repository. If you install MilestonePSTools using the Install-Module cmdlet, you might need to run the following to ensure TLS 1.2 is used for communication with PSGallery. Otherwise you may see a variety of different possible error messages when attempting to run Install-Module.
+```powershell
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 
+Install-Module PowerShellGet -RequiredVersion 2.2.4 -SkipPublisherCheck
+```
 2. Trust the PSGallery repository (optional)
 ```powershell
 Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
