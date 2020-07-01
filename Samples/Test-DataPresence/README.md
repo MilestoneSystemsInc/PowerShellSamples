@@ -37,7 +37,6 @@ do {
 } while ('y', 'n' -notcontains $isBasic)
 
 try {
-    Write-Information "Validating credentials and camera selection before we register the scheduled job"
     Write-Information "Connecting to $server as $username"
     $connected = $false
     Connect-ManagementServer -Server $server -Credential $credential -BasicUser:($isBasic -eq 'y')
