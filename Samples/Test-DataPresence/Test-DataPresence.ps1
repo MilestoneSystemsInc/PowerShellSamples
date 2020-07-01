@@ -215,6 +215,6 @@ function Test-MetadataPresence {
     }
 
     end {
-        $src.Close()
+        $source.Close()
     }
 }
