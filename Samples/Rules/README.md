@@ -1,0 +1,7 @@
+# Working with Rules
+
+Milestone introduced support for working with rules in version 2020 R1, and that support has expanded in the versions released since then. Initially there were many rule actions that, if present, would prevent the rule from being returned when requesting child items from /RuleFolder. In version 2020 R3 the most common rule actions are supported and the functionality is much more usable.
+
+That said - there are currently no functions/cmdlets built-in to MilestonePSTools for manipulating rules from PowerShell. Part of this is limited time available to spend on extending MilestonePSTools, and another is the challenge of designing simple functions to work with a fairly complex concept and interface.
+
+The scripts in this folder are functional examples of how you can work with rules, and more will be added later as time permits. These functions may make their way into the MilestonePSTools module, or perhaps a submodule will be created like "MilestonePSTools.Rules" since any functions developed for working with rules are effectively just creative arrangements of the Get-ConfigurationItem, Invoke-Item, and Set-ConfigurationItem functions which in turn are wrapping the IConfigurationService WCF proxy. You may have a different opinion on how support for rules in PowerShell should be implemented, and by keeping our opinionated versions out of the MilestonePSTools module namespace, it would be easier for you to do things your way without worrying about function name collisions.
