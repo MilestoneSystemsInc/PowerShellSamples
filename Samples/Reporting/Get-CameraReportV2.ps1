@@ -23,10 +23,15 @@ function Get-CameraReportV2 {
     )
 
     begin {
-        $runspacepool = [runspacefactory]::CreateRunspacePool(4, 16)
+        $initialSessionState = [initialsessionstate]::CreateDefault()
+        foreach ($functionName in @('Get-StreamProperties', 'GetStreamNameFromStreamUsage', 'GetResolution', 'GetPropertyDisplayName')) {
+            $definition = Get-Content Function:\$functionName -ErrorAction Stop
+            $sessionStateFunction = [System.Management.Automation.Runspaces.SessionStateFunctionEntry]::new($functionName, $definition)
+            $initialSessionState.Commands.Add($sessionStateFunction)
+        }
+        $runspacepool = [runspacefactory]::CreateRunspacePool(4, 16, $initialSessionState, $Host)
         $runspacepool.Open()
         $threads = New-Object System.Collections.Generic.List[pscustomobject]
-
         $processDevice = {
             param(
                 [VideoOS.Platform.Messaging.ItemState[]]$States,
@@ -35,6 +40,8 @@ function Get-CameraReportV2 {
                 [VideoOS.Platform.ConfigurationItems.Camera]$Camera,
                 [bool]$IncludePasswords
             )
+
+            $cameraEnabled = $Hardware.Enabled -and $Camera.Enabled
 
             function ConvertFrom-GisPoint {
                 param ([string]$GisPoint)
@@ -47,9 +54,17 @@ function Get-CameraReportV2 {
                 $long, $lat, $null = $temp -split ' '
                 return "$lat, $long"
             }
+            
+            $streamUsages = $Camera | Get-Stream -All
+            $liveStreamSettings = $Camera | Get-StreamProperties -StreamName ($streamUsages | Where-Object LiveDefault | GetStreamNameFromStreamUsage)
+            $recordedStreamSettings = $Camera | Get-StreamProperties -StreamName ($streamUsages | Where-Object Record | GetStreamNameFromStreamUsage)
+            
             $motionDetection = $Camera.MotionDetectionFolder.MotionDetections[0]
             $hardwareSettings = $Hardware | Get-HardwareSetting
-            $playbackInfo = $Camera | Get-PlaybackInfo -ErrorAction Ignore -WarningAction Ignore
+            $playbackInfo = @{ Begin = 'NotAvailable'; End = 'NotAvailable'}
+            if ($cameraEnabled -and $camera.RecordingEnabled) {
+                $playbackInfo = $Camera | Get-PlaybackInfo -ErrorAction Ignore -WarningAction Ignore
+            }
             $driver = $Hardware | Get-HardwareDriver
             $password = ''
             if ($IncludePasswords) {
@@ -63,7 +78,7 @@ function Get-CameraReportV2 {
             [pscustomobject]@{
                 Name = $Camera.Name
                 Channel = $Camera.Channel
-                Enabled = $Camera.Enabled
+                Enabled = $cameraEnabled
                 State = $States | Where-Object { $_.FQID.ObjectId -eq $Camera.Id } | Select-Object -ExpandProperty State
                 NetworkState = 'NotImplemented'
                 Location = ConvertFrom-GisPoint -GisPoint $Camera.GisPoint
@@ -73,6 +88,7 @@ function Get-CameraReportV2 {
                 Address = $Hardware.Address
                 Username = $Hardware.UserName
                 Password = $password
+                HTTPSEnabled = if ($null -ne $hardwareSettings.HTTPSEnabled) { $hardwareSettings.HTTPSEnabled.ToUpper() } else { 'NO' }
                 MAC = $hardwareSettings.MacAddress
                 Firmware = $hardwareSettings.FirmwareVersion
                 Model = $Hardware.Model
@@ -83,6 +99,14 @@ function Get-CameraReportV2 {
                 RecorderName = $RecordingServer.Name
                 RecorderHostname = $RecordingServer.HostName
                 RecorderId = $RecordingServer.Id
+
+                LiveResolution = GetPropertyDisplayName -PropertyList $liveStreamSettings -PropertyName 'Resolution', 'StreamProperty' #GetResolution -PropertyList $liveStreamSettings
+                LiveCodec = GetPropertyDisplayName -PropertyList $liveStreamSettings -PropertyName 'Codec'
+                LiveFPS = GetPropertyDisplayName -PropertyList $liveStreamSettings -PropertyName 'FPS', 'Framerate'
+                LiveMode = $streamUsages | Where-Object LiveDefault | Select-Object -ExpandProperty LiveMode
+                RecordResolution = GetPropertyDisplayName -PropertyList $recordedStreamSettings -PropertyName 'Resolution', 'StreamProperty' #GetResolution -PropertyList $recordedStreamSettings
+                RecordCodec = GetPropertyDisplayName -PropertyList $recordedStreamSettings -PropertyName 'Codec'
+                RecordFPS = GetPropertyDisplayName -PropertyList $recordedStreamSettings -PropertyName 'FPS', 'Framerate'
 
                 RecordingEnabled = $Camera.RecordingEnabled
                 RecordKeyframesOnly = $Camera.RecordKeyframesOnly
@@ -110,6 +134,7 @@ function Get-CameraReportV2 {
         $progressParams = @{
             Activity = 'Camera Report'
             CurrentOperation = ''
+            Status = 'Preparing to run report'
             PercentComplete = 0
             Completed = $false
         }
@@ -130,7 +155,9 @@ function Get-CameraReportV2 {
         Write-Progress @progressParams
 
         try {
+            
             foreach ($rs in $RecordingServer | Sort-Object Name) {
+                
                 foreach ($hw in $rs | Get-Hardware | Sort-Object Name) {
                     foreach ($cam in $hw | Get-Camera | Sort-Object Channel) {
                         $ps = [powershell]::Create()
@@ -187,5 +214,136 @@ function Get-CameraReportV2 {
             $progressParams.Completed = $true
             Write-Progress @progressParams
         }
+    }
+}
+
+
+function GetStreamNameFromStreamUsage {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory, ValueFromPipeline)]
+        [VideoOS.Platform.ConfigurationItems.StreamUsageChildItem]
+        $StreamUsage
+    )
+
+    $streamName = $StreamUsage.StreamReferenceIdValues.Keys | Where-Object {
+        $StreamUsage.StreamReferenceIdValues.$_ -eq $StreamUsage.StreamReferenceId
+    }
+    Write-Output $streamName
+}
+
+function GetResolution {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [VideoOS.ConfigurationApi.ClientService.Property[]]
+        $PropertyList
+    )
+    
+    process {
+        $result = $null
+        foreach ($propertyName in @('Resolution', 'StreamProperty')) {
+            $result = GetPropertyDisplayName -PropertyList $PropertyList -PropertyName $propertyName
+            if ($result -ne 'NotAvailable') {
+                break
+            }
+        }
+        Write-Output $result
+    }
+}
+
+function GetPropertyDisplayName {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [VideoOS.ConfigurationApi.ClientService.Property[]]
+        $PropertyList,
+
+        [Parameter(Mandatory)]
+        [string[]]
+        $PropertyName,
+
+        [Parameter()]
+        [string]
+        $DefaultValue = 'NotAvailable'
+    )
+    
+    process {
+        $value = $DefaultValue
+        if ($null -eq $PropertyList -or $PropertyList.Count -eq 0) {
+            return $value
+        }
+
+        $selectedProperty = $null
+        foreach ($property in $PropertyList) {
+            foreach ($name in $PropertyName) {
+                if ($property.Key -like "*/$name/*") {
+                    $selectedProperty = $property
+                    break
+                }
+            }
+            if ($null -ne $selectedProperty) { break }
+        }
+        if ($null -ne $selectedProperty) {
+            $value = $selectedProperty.Value
+            if ($selectedProperty.ValueType -eq 'Enum') {
+                $displayName = ($selectedProperty.ValueTypeInfos | Where-Object Value -eq $selectedProperty.Value).Name
+                if (![string]::IsNullOrWhiteSpace($displayName)) {
+                    $value = $displayName
+                }
+            }
+        }
+        Write-Output $value
+    }
+}
+
+
+
+function Get-StreamProperties {
+    [CmdletBinding()]
+    param (
+        # Specifies the camera to retrieve stream properties for
+        [Parameter(ValueFromPipeline, Mandatory, ParameterSetName = 'ByName')]
+        [Parameter(ValueFromPipeline, Mandatory, ParameterSetName = 'ByNumber')]
+        [VideoOS.Platform.ConfigurationItems.Camera]
+        $Camera,
+        
+        # Specifies a StreamUsageChildItem from Get-Stream
+        [Parameter(ParameterSetName = 'ByName')]
+        [ValidateNotNullOrEmpty()]
+        [string]
+        $StreamName,
+
+        # Specifies the stream number starting from 0. For example, "Video stream 1" is usually in the 0'th position in the StreamChildItems collection.
+        [Parameter(ParameterSetName = 'ByNumber')]
+        [ValidateRange(0, [int]::MaxValue)]
+        [int]
+        $StreamNumber
+    )
+    
+    process {
+        switch ($PSCmdlet.ParameterSetName) {
+            'ByName' {
+                $stream = (Get-ConfigurationItem -Path "DeviceDriverSettings[$($Camera.Id)]").Children | Where-Object { $_.ItemType -eq 'Stream' -and $_.DisplayName -like $StreamName }
+                if ($null -eq $stream -and ![system.management.automation.wildcardpattern]::ContainsWildcardCharacters($StreamName)) {
+                    Write-Error "No streams found on $($Camera.Name) matching the name '$StreamName'"
+                    return
+                }
+                foreach ($obj in $stream) {
+                    Write-Output $obj.Properties
+                }
+            }
+            'ByNumber' {
+                $streams = (Get-ConfigurationItem -Path "DeviceDriverSettings[$($Camera.Id)]").Children | Where-Object { $_.ItemType -eq 'Stream' }
+                if ($StreamNumber -lt $streams.Count) {
+                    Write-Output ($streams[$StreamNumber].Properties)
+                }
+                else {
+                    Write-Error "There are $($streams.Count) streams available on the camera and stream number $StreamNumber does not exist. Remember to index the streams from zero."
+                }
+            }
+            Default {}
+        }
+        
     }
 }
