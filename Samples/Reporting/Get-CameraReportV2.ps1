@@ -14,7 +14,12 @@ function Get-CameraReportV2 {
         # Specifies one or more Recording Servers from which to generate a camera report
         [Parameter(ValueFromPipeline)]
         [VideoOS.Platform.ConfigurationItems.RecordingServer[]]
-        $RecordingServer
+        $RecordingServer,
+
+        # Include plain text hardware passwords in the report
+        [Parameter()]
+        [switch]
+        $IncludePlainTextPasswords
     )
 
     begin {
@@ -27,25 +32,74 @@ function Get-CameraReportV2 {
                 [VideoOS.Platform.Messaging.ItemState[]]$States,
                 [VideoOS.Platform.ConfigurationItems.RecordingServer]$RecordingServer,
                 [VideoOS.Platform.ConfigurationItems.Hardware]$Hardware,
-                [VideoOS.Platform.ConfigurationItems.Camera]$Camera
+                [VideoOS.Platform.ConfigurationItems.Camera]$Camera,
+                [bool]$IncludePasswords
             )
+
+            function ConvertFrom-GisPoint {
+                param ([string]$GisPoint)
+            
+                if ($GisPoint -eq 'POINT EMPTY') {
+                    return [string]::Empty
+                }
+            
+                $temp = $GisPoint.Substring(7, $GisPoint.Length - 8)
+                $long, $lat, $null = $temp -split ' '
+                return "$lat, $long"
+            }
+            $motionDetection = $Camera.MotionDetectionFolder.MotionDetections[0]
+            $hardwareSettings = $Hardware | Get-HardwareSetting
             $playbackInfo = $Camera | Get-PlaybackInfo -ErrorAction Ignore -WarningAction Ignore
             $driver = $Hardware | Get-HardwareDriver
+            $password = ''
+            if ($IncludePasswords) {
+                try {
+                    $password = $Hardware | Get-HardwarePassword -ErrorAction Ignore
+                }
+                catch {
+                    $password = $_.Message
+                }
+            }
             [pscustomobject]@{
                 Name = $Camera.Name
-                Address = $Hardware.Address
                 Channel = $Camera.Channel
                 Enabled = $Camera.Enabled
                 State = $States | Where-Object { $_.FQID.ObjectId -eq $Camera.Id } | Select-Object -ExpandProperty State
                 NetworkState = 'NotImplemented'
+                Location = ConvertFrom-GisPoint -GisPoint $Camera.GisPoint
                 LastModified = $Camera.LastModified
                 Id = $Camera.Id
                 HardwareName = $Hardware.Name
+                Address = $Hardware.Address
+                Username = $Hardware.UserName
+                Password = $password
+                MAC = $hardwareSettings.MacAddress
+                Firmware = $hardwareSettings.FirmwareVersion
                 Model = $Hardware.Model
                 Driver = $driver.Name
-                DriverNumber = $driver.Number
+                DriverNumber = $driver.Number.ToString()
                 DriverRevision = $driver.DriverRevision
                 HardwareId = $Hardware.Id
+                RecorderName = $RecordingServer.Name
+                RecorderHostname = $RecordingServer.HostName
+                RecorderId = $RecordingServer.Id
+
+                RecordingEnabled = $Camera.RecordingEnabled
+                RecordKeyframesOnly = $Camera.RecordKeyframesOnly
+                RecordOnRelatedDevices = $Camera.RecordOnRelatedDevices
+                PrebufferEnabled = $Camera.PrebufferEnabled
+                PrebufferSeconds = $Camera.PrebufferSeconds
+                PrebufferInMemory = $Camera.PrebufferInMemory
+
+                MotionEnabled = $motionDetection.Enabled
+                MotionKeyframesOnly = $motionDetection.KeyframesOnly
+                MotionProcessTime = $motionDetection.ProcessTime
+                MotionSensitivityMode = if ($motionDetection.ManualSensitivityEnabled) { 'Manual' } else { 'Automatic' }
+                MotionManualSensitivity = $motionDetection.ManualSensitivity
+                MotionMetadataEnabled = $motionDetection.GenerateMotionMetadata
+                MotionExcludeRegions = if ($motionDetection.UseExcludeRegions) { 'Yes' } else { 'No' }
+                MotionHardwareAccelerationMode = $motionDetection.HardwareAccelerationMode
+
                 MediaDatabaseBeginning = $playbackInfo.Begin
                 MediaDatabaseEnd = $playbackInfo.End
             }
@@ -86,6 +140,7 @@ function Get-CameraReportV2 {
                             RecordingServer = $rs
                             Hardware = $hw
                             Camera = $cam
+                            IncludePasswords = $IncludePlainTextPasswords
                         }).BeginInvoke()
                         $threads.Add([pscustomobject]@{
                             PowerShell = $ps
