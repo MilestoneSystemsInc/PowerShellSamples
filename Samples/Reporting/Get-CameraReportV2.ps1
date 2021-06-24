@@ -19,12 +19,22 @@ function Get-CameraReportV2 {
         # Include plain text hardware passwords in the report
         [Parameter()]
         [switch]
-        $IncludePlainTextPasswords
+        $IncludePlainTextPasswords,
+
+        # Specifies that disabled cameras should be excluded from the results
+        [Parameter()]
+        [switch]
+        $ExcludeDisabled,
+
+        # Specifies that a live JPEG snapshot should be requested for each camera
+        [Parameter()]
+        [switch]
+        $IncludeSnapshots
     )
 
     begin {
         $initialSessionState = [initialsessionstate]::CreateDefault()
-        foreach ($functionName in @('Get-StreamProperties', 'GetStreamNameFromStreamUsage', 'GetResolution', 'GetPropertyDisplayName')) {
+        foreach ($functionName in @('Get-StreamProperties', 'GetStreamNameFromStreamUsage', 'GetResolution', 'GetPropertyDisplayName', 'ConvertFrom-Snapshot')) {
             $definition = Get-Content Function:\$functionName -ErrorAction Stop
             $sessionStateFunction = [System.Management.Automation.Runspaces.SessionStateFunctionEntry]::new($functionName, $definition)
             $initialSessionState.Commands.Add($sessionStateFunction)
@@ -36,13 +46,14 @@ function Get-CameraReportV2 {
             param(
                 [VideoOS.Platform.Messaging.ItemState[]]$States,
                 [VideoOS.Platform.ConfigurationItems.RecordingServer]$RecordingServer,
+                [hashtable]$VideoDeviceStatistics,
+                [hashtable]$CurrentDeviceStatus,
+                [hashtable]$StorageTable,
                 [VideoOS.Platform.ConfigurationItems.Hardware]$Hardware,
                 [VideoOS.Platform.ConfigurationItems.Camera]$Camera,
-                [bool]$IncludePasswords
+                [bool]$IncludePasswords,
+                [bool]$IncludeSnapshots
             )
-
-            $cameraEnabled = $Hardware.Enabled -and $Camera.Enabled
-
             function ConvertFrom-GisPoint {
                 param ([string]$GisPoint)
             
@@ -55,6 +66,7 @@ function Get-CameraReportV2 {
                 return "$lat, $long"
             }
             
+            $cameraEnabled = $Hardware.Enabled -and $Camera.Enabled
             $streamUsages = $Camera | Get-Stream -All
             $liveStreamSettings = $Camera | Get-StreamProperties -StreamName ($streamUsages | Where-Object LiveDefault | GetStreamNameFromStreamUsage)
             $recordedStreamSettings = $Camera | Get-StreamProperties -StreamName ($streamUsages | Where-Object Record | GetStreamNameFromStreamUsage)
@@ -63,7 +75,10 @@ function Get-CameraReportV2 {
             $hardwareSettings = $Hardware | Get-HardwareSetting
             $playbackInfo = @{ Begin = 'NotAvailable'; End = 'NotAvailable'}
             if ($cameraEnabled -and $camera.RecordingEnabled) {
-                $playbackInfo = $Camera | Get-PlaybackInfo -ErrorAction Ignore -WarningAction Ignore
+                $tempPlaybackInfo = $Camera | Get-PlaybackInfo -ErrorAction Ignore -WarningAction Ignore
+                if ($null -ne $tempPlaybackInfo) {
+                    $playbackInfo = $tempPlaybackInfo
+                }
             }
             $driver = $Hardware | Get-HardwareDriver
             $password = ''
@@ -75,13 +90,25 @@ function Get-CameraReportV2 {
                     $password = $_.Message
                 }
             }
+            $cameraStatus = $CurrentDeviceStatus.$($RecordingServer.Id).CameraDeviceStatusArray | Where-Object DeviceId -eq $Camera.Id
+            $statistics = $VideoDeviceStatistics.$($RecordingServer.Id) | Where-Object DeviceId -eq $Camera.Id
+            $expectedRetention = New-Timespan -Minutes ($StorageTable.$($Camera.RecordingStorage) | ForEach-Object { $_; $_.ArchiveStorageFolder.ArchiveStorages } | Sort-Object RetainMinutes -Descending | Select-Object -First 1 -ExpandProperty RetainMinutes)
+            $snapshot = $null
+            if ($IncludeSnapshots -and $cameraEnabled -and $cameraStatus.Started) {
+                $snapshot = $Camera | Get-Snapshot -Live -ErrorAction Ignore | ConvertFrom-Snapshot
+            }
             [pscustomobject]@{
                 Name = $Camera.Name
                 Channel = $Camera.Channel
                 Enabled = $cameraEnabled
-                State = $States | Where-Object { $_.FQID.ObjectId -eq $Camera.Id } | Select-Object -ExpandProperty State
-                NetworkState = 'NotImplemented'
+                State = if ($cameraEnabled) { $States | Where-Object { $_.FQID.ObjectId -eq $Camera.Id } | Select-Object -ExpandProperty State } else { 'NotAvailable' }
+                MediaOverflow = if ($cameraEnabled)  { $cameraStatus.ErrorOverflow } else { 'NotAvailable' }
+                DbRepairInProgress = if ($cameraEnabled)  { $cameraStatus.DbRepairInProgress } else { 'NotAvailable' }
+                DbWriteError = if ($cameraEnabled)  { $cameraStatus.ErrorWritingGop } else { 'NotAvailable' }
                 Location = ConvertFrom-GisPoint -GisPoint $Camera.GisPoint
+                MediaDatabaseBeginning = $playbackInfo.Begin
+                MediaDatabaseEnd = $playbackInfo.End                
+                
                 LastModified = $Camera.LastModified
                 Id = $Camera.Id
                 HardwareName = $Hardware.Name
@@ -100,13 +127,20 @@ function Get-CameraReportV2 {
                 RecorderHostname = $RecordingServer.HostName
                 RecorderId = $RecordingServer.Id
 
-                LiveResolution = GetPropertyDisplayName -PropertyList $liveStreamSettings -PropertyName 'Resolution', 'StreamProperty' #GetResolution -PropertyList $liveStreamSettings
-                LiveCodec = GetPropertyDisplayName -PropertyList $liveStreamSettings -PropertyName 'Codec'
-                LiveFPS = GetPropertyDisplayName -PropertyList $liveStreamSettings -PropertyName 'FPS', 'Framerate'
+                ConfiguredLiveResolution = GetPropertyDisplayName -PropertyList $liveStreamSettings -PropertyName 'Resolution', 'StreamProperty' #GetResolution -PropertyList $liveStreamSettings
+                ConfiguredLiveCodec = GetPropertyDisplayName -PropertyList $liveStreamSettings -PropertyName 'Codec'
+                ConfiguredLiveFPS = GetPropertyDisplayName -PropertyList $liveStreamSettings -PropertyName 'FPS', 'Framerate'
                 LiveMode = $streamUsages | Where-Object LiveDefault | Select-Object -ExpandProperty LiveMode
-                RecordResolution = GetPropertyDisplayName -PropertyList $recordedStreamSettings -PropertyName 'Resolution', 'StreamProperty' #GetResolution -PropertyList $recordedStreamSettings
-                RecordCodec = GetPropertyDisplayName -PropertyList $recordedStreamSettings -PropertyName 'Codec'
-                RecordFPS = GetPropertyDisplayName -PropertyList $recordedStreamSettings -PropertyName 'FPS', 'Framerate'
+                ConfiguredRecordResolution = GetPropertyDisplayName -PropertyList $recordedStreamSettings -PropertyName 'Resolution', 'StreamProperty' #GetResolution -PropertyList $recordedStreamSettings
+                ConfiguredRecordCodec = GetPropertyDisplayName -PropertyList $recordedStreamSettings -PropertyName 'Codec'
+                ConfiguredRecordFPS = GetPropertyDisplayName -PropertyList $recordedStreamSettings -PropertyName 'FPS', 'Framerate'
+
+                CurrentLiveResolution = if ($cameraEnabled) { $statistics | Select-Object -ExpandProperty VideoStreamStatisticsArray | Where-Object LiveStreamDefault | Select-Object -ExpandProperty ImageResolution -First 1 | Foreach-Object { "$($_.Width)x$($_.Height)" } } else { 'NotAvailable' }
+                CurrentLiveFPS = if ($cameraEnabled) { $statistics | Select-Object -ExpandProperty VideoStreamStatisticsArray | Where-Object LiveStreamDefault | Select-Object -ExpandProperty FPS -First 1 } else { 'NotAvailable' }
+                CurrentLiveBPS = if ($cameraEnabled) { $statistics | Select-Object -ExpandProperty VideoStreamStatisticsArray | Where-Object LiveStreamDefault | Select-Object -ExpandProperty BPS -First 1 } else { 'NotAvailable' }
+                CurrentRecordedResolution = if ($cameraEnabled) { $statistics | Select-Object -ExpandProperty VideoStreamStatisticsArray | Where-Object RecordingStream | Select-Object -ExpandProperty ImageResolution -First 1 | Foreach-Object { "$($_.Width)x$($_.Height)" } } else { 'NotAvailable' }
+                CurrentRecordedFPS = if ($cameraEnabled) { $statistics | Select-Object -ExpandProperty VideoStreamStatisticsArray | Where-Object RecordingStream | Select-Object -ExpandProperty FPS -First 1 } else { 'NotAvailable' }
+                CurrentRecordedBPS = if ($cameraEnabled) { $statistics | Select-Object -ExpandProperty VideoStreamStatisticsArray | Where-Object RecordingStream | Select-Object -ExpandProperty BPS -First 1 } else { 'NotAvailable' }
 
                 RecordingEnabled = $Camera.RecordingEnabled
                 RecordKeyframesOnly = $Camera.RecordKeyframesOnly
@@ -114,6 +148,12 @@ function Get-CameraReportV2 {
                 PrebufferEnabled = $Camera.PrebufferEnabled
                 PrebufferSeconds = $Camera.PrebufferSeconds
                 PrebufferInMemory = $Camera.PrebufferInMemory
+
+                RecordingStorageName = $StorageTable.$($Camera.RecordingStorage).Name
+                RecordingPath = [io.path]::Combine($StorageTable.$($Camera.RecordingStorage).DiskPath, $StorageTable.$($Camera.RecordingStorage).Id)
+                ExpectedRetention = $expectedRetention
+                ActualRetention = if ($playbackInfo.Begin -is [string]) { 'NotAvailable' } else { [datetime]::UtcNow - $playbackInfo.Begin }
+                MeetsRetentionPolicy = if ($playbackInfo.Begin -is [string]) { 'NotAvailable' } else { ([datetime]::UtcNow - $playbackInfo.Begin) -ge $expectedRetention }
 
                 MotionEnabled = $motionDetection.Enabled
                 MotionKeyframesOnly = $motionDetection.KeyframesOnly
@@ -124,8 +164,7 @@ function Get-CameraReportV2 {
                 MotionExcludeRegions = if ($motionDetection.UseExcludeRegions) { 'Yes' } else { 'No' }
                 MotionHardwareAccelerationMode = $motionDetection.HardwareAccelerationMode
 
-                MediaDatabaseBeginning = $playbackInfo.Begin
-                MediaDatabaseEnd = $playbackInfo.End
+                LiveImage = $snapshot
             }
         }
     }
@@ -146,28 +185,42 @@ function Get-CameraReportV2 {
         }
 
         Write-Verbose 'Getting the current state of all cameras'
-        $progressParams.CurrentOperation = 'Calling Get-ItemState -CamerasOnly'
+        $progressParams.CurrentOperation = 'Calling Get-ItemState'
         Write-Progress @progressParams
-        $itemState = Get-ItemState -CamerasOnly -ErrorAction Stop
+        $itemState = Get-ItemState -ErrorAction Stop
 
-        Write-Verbose 'Discovering all cameras'
-        $progressParams.CurrentOperation = 'Discovering cameras'
+        Write-Verbose 'Discovering all cameras and retrieving status and statistics'
+        $progressParams.CurrentOperation = 'Discovering all cameras and retrieving status and statistics'
         Write-Progress @progressParams
 
         try {
-            
-            foreach ($rs in $RecordingServer | Sort-Object Name) {
-                
-                foreach ($hw in $rs | Get-Hardware | Sort-Object Name) {
-                    foreach ($cam in $hw | Get-Camera | Sort-Object Channel) {
+            $respondingRecordingServers = $RecordingServer.Id | Where-Object { $id = $_; $id -in $itemState.FQID.ObjectId -and ($itemState | Where-Object { $id -eq $_.FQID.ObjectId }).State -eq 'Server Responding' }
+            Write-Debug -Message 'Retrieving status and statistics from the Recording Server'
+            $videoDeviceStatistics = Get-VideoDeviceStatistics -AsHashtable -RecordingServerId $respondingRecordingServers
+            $currentDeviceStatus = Get-CurrentDeviceStatus -AsHashtable -RecordingServerId $respondingRecordingServers
+            $storageTable = @{}
+            foreach ($rs in $RecordingServer) {
+                $rs.StorageFolder.Storages | Foreach-Object {
+                    $_.FillChildren('StorageArchive')
+                    $storageTable.$($_.Path) = $_
+                }
+                foreach ($hw in $rs | Get-Hardware) {
+                    foreach ($cam in $hw | Get-Camera) {
+                        if ($ExcludeDisabled -and -not ($cam.Enabled -and $hw.Enabled)) {
+                            continue
+                        }
                         $ps = [powershell]::Create()
                         $ps.RunspacePool = $runspacepool
                         $asyncResult = $ps.AddScript($processDevice).AddParameters(@{
                             State = $itemState
                             RecordingServer = $rs
+                            VideoDeviceStatistics = $videoDeviceStatistics
+                            CurrentDeviceStatus = $currentDeviceStatus
+                            StorageTable = $storageTable
                             Hardware = $hw
                             Camera = $cam
                             IncludePasswords = $IncludePlainTextPasswords
+                            IncludeSnapshots = $IncludeSnapshots
                         }).BeginInvoke()
                         $threads.Add([pscustomobject]@{
                             PowerShell = $ps
@@ -185,7 +238,7 @@ function Get-CameraReportV2 {
             $totalDevices = $threads.Count
             while ($threads.Count -gt 0) {
                 $progressParams.PercentComplete = ($totalDevices - $threads.Count) / $totalDevices * 100
-                $progressParams.Status = "Processed $($totalDevices - $threads.Count) out of $totalDevices requests"
+                $progressParams.Status = "Processed $($totalDevices - $threads.Count) out of $totalDevices cameras"
                 Write-Progress @progressParams
                 foreach ($thread in $threads) {
                     if ($thread.Result.IsCompleted) {
@@ -345,5 +398,344 @@ function Get-StreamProperties {
             Default {}
         }
         
+    }
+}
+
+
+
+function Get-CurrentDeviceStatus {
+    <#
+    .SYNOPSIS
+        Gets the current device status of all devices of the desired type from one or more recording servers
+    .DESCRIPTION
+        Uses the RecorderStatusService2 client to call GetCurrentDeviceStatus and receive the current status
+        of all devices of the desired type(s). Specify one or more types in the DeviceType parameter to receive
+        status of more device types than cameras.
+    .EXAMPLE
+        PS C:\> Get-RecordingServer -Name 'My Recording Server' | Get-CurrentDeviceStatus -DeviceType All
+        Gets the status of all devices of all device types from the Recording Server named 'My Recording Server'.
+    .EXAMPLE
+        PS C:\> Get-CurrentDeviceStatus -DeviceType Camera, Microphone
+        Gets the status of all cameras and microphones from all recording servers.
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param (
+        # Specifies one or more Recording Server ID's to which the results will be limited. Omit this parameter if you want device status from all Recording Servers
+        [Parameter(ValueFromPipelineByPropertyName)]
+        [Alias('Id')]
+        [guid[]]
+        $RecordingServerId,
+
+        # Specifies the type of devices to include in the results. By default only cameras will be included and you can expand this to include all device types
+        [Parameter()]
+        [ValidateSet('Camera', 'Microphone', 'Speaker', 'Metadata', 'Input event', 'Output', 'Event', 'Hardware', 'All')]
+        [string[]]
+        $DeviceType = 'Camera',
+
+        # Specifies that the output should be provided in a complete hashtable instead of one pscustomobject value at a time
+        [Parameter()]
+        [switch]
+        $AsHashTable
+    )
+
+    process {
+        if ($DeviceType -contains 'All') {
+            $DeviceType = @('Camera', 'Microphone', 'Speaker', 'Metadata', 'Input event', 'Output', 'Event', 'Hardware')
+        }
+        $includedDeviceTypes = $DeviceType | Foreach-Object { [videoos.platform.kind]::$_ }
+        
+        Write-Verbose "Creating a runspace pool"
+        $pool = [runspacefactory]::CreateRunspacePool(4, 8)
+        $pool.Open()
+
+        $scriptBlock = {
+            param(
+                [uri]$Uri,
+                [guid[]]$DeviceIds
+            )
+            try {
+                $client = [VideoOS.Platform.SDK.Proxy.Status2.RecorderStatusService2]::new($Uri)
+                $client.GetCurrentDeviceStatus((Get-Token), $deviceIds)
+            }
+            catch {
+                throw "Unable to get current device status from $Uri"
+            }
+            
+        }
+
+        Write-Verbose 'Retrieving recording server information'
+        $managementServer = [videoos.platform.configuration]::Instance.GetItems([videoos.platform.itemhierarchy]::SystemDefined) | Where-Object { $_.FQID.Kind -eq [videoos.platform.kind]::Server -and $_.FQID.ObjectId -eq (Get-ManagementServer).Id }
+        $recorders = $managementServer.GetChildren() | Where-Object { $_.FQID.ServerId.ServerType -eq 'XPCORS' -and ($null -eq $RecordingServerId -or $_.FQID.ObjectId -in $RecordingServerId) }
+        Write-Verbose "Retrieving video device statistics from $($recorders.Count) recording servers"
+        try {
+            $threads = New-Object System.Collections.Generic.List[pscustomobject]
+            foreach ($recorder in $recorders) {
+                Write-Verbose "Requesting device status from $($recorder.Name) at $($recorder.FQID.ServerId.Uri)"
+                $folders = $recorder.GetChildren() | Where-Object { $_.FQID.Kind -in $includedDeviceTypes -and $_.FQID.FolderType -eq [videoos.platform.foldertype]::SystemDefined}
+                $deviceIds = [guid[]]($folders | Foreach-Object {
+                    $children = $_.GetChildren()
+                    if ($null -ne $children -and $children.Count -gt 0) {
+                        $children.FQID.ObjectId
+                    }
+                })
+    
+                $ps = [powershell]::Create()
+                $ps.RunspacePool = $pool
+                $asyncResult = $ps.AddScript($scriptBlock).AddParameters(@{
+                    Uri = $recorder.FQID.ServerId.Uri
+                    DeviceIds = $deviceIds
+                }).BeginInvoke()
+                $threads.Add([pscustomobject]@{
+                    RecordingServerId = $recorder.FQID.ObjectId
+                    PowerShell = $ps
+                    Result = $asyncResult
+                })
+            }
+    
+            if ($threads.Count -eq 0) {
+                return
+            }
+    
+            $hashTable = @{}
+            $completedThreads = New-Object System.Collections.Generic.List[pscustomobject]
+            while ($threads.Count -gt 0) {
+                foreach ($thread in $threads) {
+                    if ($thread.Result.IsCompleted) {
+                        Write-Verbose "Receiving results from recording server with ID $($thread.RecordingServerId)"
+                        if ($AsHashTable) {
+                            $hashTable.$($thread.RecordingServerId.ToString()) = $null
+                        }
+                        else {
+                            $obj = @{
+                                RecordingServerId = $thread.RecordingServerId.ToString()
+                                CurrentDeviceStatus = $null
+                            }
+                        }
+                        try {
+                            $result = $thread.PowerShell.EndInvoke($thread.Result) | ForEach-Object { Write-Output $_ }
+                            if ($AsHashTable) {
+                                $hashTable.$($thread.RecordingServerId.ToString()) = $result
+                            }
+                            else {                                    
+                                $obj.CurrentDeviceStatus = $result
+                            }
+                        }
+                        catch {
+                            Write-Error $_
+                        }
+                        finally {
+                            $thread.PowerShell.Dispose()
+                            $completedThreads.Add($thread)
+                            if (!$AsHashTable) {
+                                Write-Output ([pscustomobject]$obj)
+                            }
+                        }
+                    }
+                }
+                $completedThreads | Foreach-Object { [void]$threads.Remove($_)}
+                $completedThreads.Clear()
+                if ($threads.Count -eq 0) {
+                    break;
+                }
+                Start-Sleep -Milliseconds 250
+            }
+            if ($AsHashTable) {
+                Write-Output $hashTable
+            }
+        }
+        finally {
+            if ($threads.Count -gt 0) {
+                Write-Warning "Stopping $($threads.Count) running PowerShell instances. This may take a minute. . ."
+                foreach ($thread in $threads) {
+                    $thread.PowerShell.Dispose()
+                }
+            }
+            $pool.Close()
+            $pool.Dispose()
+        }
+    }
+}
+
+
+
+function Get-VideoDeviceStatistics {
+    <#
+    .SYNOPSIS
+        Gets the current device status of all devices of the desired type from one or more recording servers
+    .DESCRIPTION
+        Uses the RecorderStatusService2 client to call GetCurrentDeviceStatus and receive the current status
+        of all devices of the desired type(s). Specify one or more types in the DeviceType parameter to receive
+        status of more device types than cameras.
+    .EXAMPLE
+        PS C:\> Get-RecordingServer -Name 'My Recording Server' | Get-CurrentDeviceStatus -DeviceType All
+        Gets the status of all devices of all device types from the Recording Server named 'My Recording Server'.
+    .EXAMPLE
+        PS C:\> Get-CurrentDeviceStatus -DeviceType Camera, Microphone
+        Gets the status of all cameras and microphones from all recording servers.
+    #>
+    [CmdletBinding()]
+    param (
+        # Specifies one or more Recording Server ID's to which the results will be limited. Omit this parameter if you want device status from all Recording Servers
+        [Parameter(ValueFromPipelineByPropertyName)]
+        [Alias('Id')]
+        [guid[]]
+        $RecordingServerId,
+
+        # Specifies that the output should be provided in a complete hashtable instead of one pscustomobject value at a time
+        [Parameter()]
+        [switch]
+        $AsHashTable
+    )
+
+    process {        
+        Write-Verbose "Creating a runspace pool"
+        $pool = [runspacefactory]::CreateRunspacePool(4, 8)
+        $pool.Open()
+
+        $scriptBlock = {
+            param(
+                [uri]$Uri,
+                [guid[]]$DeviceIds
+            )
+            try {
+                $client = [VideoOS.Platform.SDK.Proxy.Status2.RecorderStatusService2]::new($Uri)
+                $client.GetVideoDeviceStatistics((Get-Token), $deviceIds)
+            }
+            catch {
+                throw "Unable to get video device statistics from $Uri"
+            }
+            
+        }
+
+        Write-Verbose 'Retrieving recording server information'
+        $managementServer = [videoos.platform.configuration]::Instance.GetItems([videoos.platform.itemhierarchy]::SystemDefined) | Where-Object { $_.FQID.Kind -eq [videoos.platform.kind]::Server -and $_.FQID.ObjectId -eq (Get-ManagementServer).Id }
+        $recorders = $managementServer.GetChildren() | Where-Object { $_.FQID.ServerId.ServerType -eq 'XPCORS' -and ($null -eq $RecordingServerId -or $_.FQID.ObjectId -in $RecordingServerId) }
+        Write-Verbose "Retrieving video device statistics from $($recorders.Count) recording servers"
+        try {
+            $threads = New-Object System.Collections.Generic.List[pscustomobject]
+            foreach ($recorder in $recorders) {
+                Write-Verbose "Requesting video device statistics from $($recorder.Name) at $($recorder.FQID.ServerId.Uri)"
+                $folders = $recorder.GetChildren() | Where-Object { $_.FQID.Kind -eq [videoos.platform.kind]::Camera -and $_.FQID.FolderType -eq [videoos.platform.foldertype]::SystemDefined}
+                $deviceIds = [guid[]]($folders | Foreach-Object {
+                    $children = $_.GetChildren()
+                    if ($null -ne $children -and $children.Count -gt 0) {
+                        $children.FQID.ObjectId
+                    }
+                })
+    
+                $ps = [powershell]::Create()
+                $ps.RunspacePool = $pool
+                $asyncResult = $ps.AddScript($scriptBlock).AddParameters(@{
+                    Uri = $recorder.FQID.ServerId.Uri
+                    DeviceIds = $deviceIds
+                }).BeginInvoke()
+                $threads.Add([pscustomobject]@{
+                    RecordingServerId = $recorder.FQID.ObjectId
+                    PowerShell = $ps
+                    Result = $asyncResult
+                })
+            }
+    
+            if ($threads.Count -eq 0) {
+                return
+            }
+    
+            $hashTable = @{}
+            $completedThreads = New-Object System.Collections.Generic.List[pscustomobject]
+            while ($threads.Count -gt 0) {
+                foreach ($thread in $threads) {
+                    if ($thread.Result.IsCompleted) {
+                        Write-Verbose "Receiving results from recording server with ID $($thread.RecordingServerId)"
+                        if ($AsHashTable) {
+                            $hashTable.$($thread.RecordingServerId.ToString()) = $null
+                        }
+                        else {
+                            $obj = @{
+                                RecordingServerId = $thread.RecordingServerId.ToString()
+                                VideoDeviceStatistics = $null
+                            }
+                        }
+                        try {
+                            $result = $thread.PowerShell.EndInvoke($thread.Result) | ForEach-Object { Write-Output $_ }
+                            if ($AsHashTable) {
+                                $hashTable.$($thread.RecordingServerId.ToString()) = $result
+                            }
+                            else {                                    
+                                $obj.VideoDeviceStatistics = $result
+                            }
+                        }
+                        catch {
+                            Write-Error $_
+                        }
+                        finally {
+                            $thread.PowerShell.Dispose()
+                            $completedThreads.Add($thread)
+                            if (!$AsHashTable) {
+                                Write-Output ([pscustomobject]$obj)
+                            }
+                        }
+                    }
+                }
+                $completedThreads | Foreach-Object { [void]$threads.Remove($_)}
+                $completedThreads.Clear()
+                if ($threads.Count -eq 0) {
+                    break;
+                }
+                Start-Sleep -Milliseconds 250
+            }
+            if ($AsHashTable) {
+                Write-Output $hashTable
+            }
+        }
+        finally {
+            if ($threads.Count -gt 0) {
+                Write-Warning "Stopping $($threads.Count) running PowerShell instances. This may take a minute. . ."
+                foreach ($thread in $threads) {
+                    $thread.PowerShell.Dispose()
+                }
+            }
+            $pool.Close()
+            $pool.Dispose()            
+        }
+    }
+}
+
+
+
+function ConvertFrom-Snapshot {
+    <#
+    .SYNOPSIS
+        Converts from the output provided by Get-Snapshot to a [System.Drawing.Image] object.
+    .DESCRIPTION
+        Converts from the output provided by Get-Snapshot to a [System.Drawing.Image] object. Don't
+        forget to call Dispose() on Image when you're done with it!
+    .EXAMPLE
+        PS C:\> $image = $camera | Get-Snapshot -Live | ConvertFrom-Snapshot
+        Get's a live snapshot from $camera and converts it to a System.Drawing.Image object and saves it to $image
+    .INPUTS
+        Accepts a byte array, and will accept the byte array from Get-Snapshot by property name. The property name for
+        a live image is 'Content' while the property name for the JPEG byte array on a snapshot from recorded video is
+        'Bytes'.
+    .OUTPUTS
+        [System.Drawing.Image]
+    .NOTES
+        Don't forget to call Dispose() when you're done with the image!
+    #>
+    [CmdletBinding()]
+    [OutputType([system.drawing.image])]
+    param(
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [Alias('Bytes')]
+        [byte[]]
+        $Content
+    )
+
+    process {
+        if ($null -eq $Content -or $Content.Length -eq 0) {
+            return $null
+        }
+        $ms = [io.memorystream]::new($Content)
+        Write-Output ([system.drawing.image]::FromStream($ms))
     }
 }
