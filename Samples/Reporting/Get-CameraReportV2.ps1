@@ -24,7 +24,7 @@ function Get-CameraReportV2 {
         # Specifies that disabled cameras should be excluded from the results
         [Parameter()]
         [switch]
-        $ExcludeDisabled,
+        $IncludeDisabled,
 
         # Specifies that a live JPEG snapshot should be requested for each camera
         [Parameter()]
@@ -34,12 +34,12 @@ function Get-CameraReportV2 {
 
     begin {
         $initialSessionState = [initialsessionstate]::CreateDefault()
-        foreach ($functionName in @('Get-StreamProperties', 'GetStreamNameFromStreamUsage', 'GetResolution', 'GetPropertyDisplayName', 'ConvertFrom-Snapshot')) {
+        foreach ($functionName in @('Get-StreamProperties', 'GetStreamNameFromStreamUsage', 'GetResolution', 'GetPropertyDisplayName', 'ConvertFrom-Snapshot', 'ConvertFrom-GisPoint')) {
             $definition = Get-Content Function:\$functionName -ErrorAction Stop
             $sessionStateFunction = [System.Management.Automation.Runspaces.SessionStateFunctionEntry]::new($functionName, $definition)
             $initialSessionState.Commands.Add($sessionStateFunction)
         }
-        $runspacepool = [runspacefactory]::CreateRunspacePool(4, 16, $initialSessionState, $Host)
+        $runspacepool = [runspacefactory]::CreateRunspacePool(16, 16, $initialSessionState, $Host)
         $runspacepool.Open()
         $threads = New-Object System.Collections.Generic.List[pscustomobject]
         $processDevice = {
@@ -54,17 +54,6 @@ function Get-CameraReportV2 {
                 [bool]$IncludePasswords,
                 [bool]$IncludeSnapshots
             )
-            function ConvertFrom-GisPoint {
-                param ([string]$GisPoint)
-            
-                if ($GisPoint -eq 'POINT EMPTY') {
-                    return [string]::Empty
-                }
-            
-                $temp = $GisPoint.Substring(7, $GisPoint.Length - 8)
-                $long, $lat, $null = $temp -split ' '
-                return "$lat, $long"
-            }
             
             $cameraEnabled = $Hardware.Enabled -and $Camera.Enabled
             $streamUsages = $Camera | Get-Stream -All
@@ -97,6 +86,9 @@ function Get-CameraReportV2 {
             if ($IncludeSnapshots -and $cameraEnabled -and $cameraStatus.Started) {
                 $snapshot = $Camera | Get-Snapshot -Live -ErrorAction Ignore | ConvertFrom-Snapshot
             }
+            elseif (!$IncludeSnapshots) {
+                $snapshot = 'NotRequested'
+            }
             [pscustomobject]@{
                 Name = $Camera.Name
                 Channel = $Camera.Channel
@@ -105,10 +97,11 @@ function Get-CameraReportV2 {
                 MediaOverflow = if ($cameraEnabled)  { $cameraStatus.ErrorOverflow } else { 'NotAvailable' }
                 DbRepairInProgress = if ($cameraEnabled)  { $cameraStatus.DbRepairInProgress } else { 'NotAvailable' }
                 DbWriteError = if ($cameraEnabled)  { $cameraStatus.ErrorWritingGop } else { 'NotAvailable' }
-                Location = ConvertFrom-GisPoint -GisPoint $Camera.GisPoint
+                GpsCoordinates = if ($Camera.GisPoint -eq 'POINT EMPTY') { 'NotSet' } else { ConvertFrom-GisPoint -GisPoint $Camera.GisPoint }
                 MediaDatabaseBeginning = $playbackInfo.Begin
                 MediaDatabaseEnd = $playbackInfo.End                
-                
+                UsedSpaceInBytes = if ($cameraEnabled) { $statistics | Select-Object -ExpandProperty UsedSpaceInBytes } else { 'NotAvailable' }
+
                 LastModified = $Camera.LastModified
                 Id = $Camera.Id
                 HardwareName = $Hardware.Name
@@ -164,7 +157,7 @@ function Get-CameraReportV2 {
                 MotionExcludeRegions = if ($motionDetection.UseExcludeRegions) { 'Yes' } else { 'No' }
                 MotionHardwareAccelerationMode = $motionDetection.HardwareAccelerationMode
 
-                LiveImage = $snapshot
+                Snapshot = $snapshot
             }
         }
     }
@@ -206,7 +199,7 @@ function Get-CameraReportV2 {
                 }
                 foreach ($hw in $rs | Get-Hardware) {
                     foreach ($cam in $hw | Get-Camera) {
-                        if ($ExcludeDisabled -and -not ($cam.Enabled -and $hw.Enabled)) {
+                        if (!$IncludeDisabled -and -not ($cam.Enabled -and $hw.Enabled)) {
                             continue
                         }
                         $ps = [powershell]::Create()
@@ -738,4 +731,16 @@ function ConvertFrom-Snapshot {
         $ms = [io.memorystream]::new($Content)
         Write-Output ([system.drawing.image]::FromStream($ms))
     }
+}
+
+function ConvertFrom-GisPoint {
+    param ([string]$GisPoint)
+
+    if ($GisPoint -eq 'POINT EMPTY') {
+        return [string]::Empty
+    }
+
+    $temp = $GisPoint.Substring(7, $GisPoint.Length - 8)
+    $long, $lat, $null = $temp -split ' '
+    return "$lat, $long"
 }
