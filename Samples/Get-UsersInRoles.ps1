@@ -19,6 +19,16 @@ function Get-UsersInRoles {
         Get-UsersInRoles -RoleName "Administrators"
 
         Returns all of the users/groups that are in the Administrators role
+
+    .EXAMPLE
+        Get-UsersInRoles | Out-GridView
+
+        Outputs the results to a GridView pop-up.
+    
+    .EXAMPLE
+        Get-UsersInRoles | Export-Csv -Path C:\CsvExports\Users.csv -NoTypeInformation
+
+        Exports the information to a CSV file called Users.csv located at C:\CsvExports.  The CsvExports folder must exist before running the command.
     #>
     
     [CmdletBinding()]
