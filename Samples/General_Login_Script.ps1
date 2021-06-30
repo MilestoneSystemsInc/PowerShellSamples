@@ -7,13 +7,11 @@
 #
 ###################################################################################################
 
-##### Start Login Script #####
-
 Import-Module MilestonePSTools
 $currentErrorActionPreference = $ErrorActionPreference
 $ErrorActionPreference = "Stop"
 
-# Checks to see if the MIP SDK EULA has been accepted already.  If it hasn't, it asks them to accept it.
+# Checks to see if the MIP SDK EULA has been accepted already.  If it hasn't, it asks the user to accept it.
 if ((Test-Path "$($env:USERPROFILE)\AppData\Roaming\MilestonePSTools\user-accepted-eula.txt") -ne $true)
 {
     do
@@ -43,7 +41,7 @@ if ([string]::IsNullOrWhiteSpace($server))
     $server = "localhost"
 }
 
-# Sets $userType to the appropriate user type based on the input of 1, 2, or 3 requested above.
+# Sets $userType to the appropriate user type based on the input of 1, 2, or 3 requested.
 do
 {
     $userType = ""
@@ -65,7 +63,7 @@ Write-Host "`nConnecting to Management Server.`n" -ForegroundColor Green
 
 try
 {
-    # If $userType equals WindowsUser or BasicUser, prompt for credentials.
+    # Start the login process.  If $userType is WindowsUser or BasicUser, it will prompt for credentials.
     if ($userType -eq "WindowsUser" -or $userType -eq "BasicUser")
     {
         switch ($userType)
@@ -101,5 +99,3 @@ if ($null -ne $ms)
 {
     Write-Host "`nSuccessfully connected to Management Server" -ForegroundColor Green
 }
-
-##### End Login Script #####
