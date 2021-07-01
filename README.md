@@ -66,30 +66,64 @@ MilestonePSTools is developed using the latest build of Milestone's MIP SDK. As 
 * Milestone XProtect VMS (XProtect Essential+, Express+, Professional+, Expert, or Corporate) 2014 or newer
 * Windows Desktop/Server edition (not compatible with PowerShell Core)
 * .NET Framework 4.7
-* PowerShell 5.1 or newer. Use `$PSVersionTable` to determine the PSVersion of your current PowerShell terminal
+* PowerShell 5.1 or newer. Use `$PSVersionTable` to determine the PSVersion of your current PowerShell terminal. If you need to upgrade PowerShell, download Windows [Management Framework 5.1](https://www.microsoft.com/en-us/download/details.aspx?id=54616) from Microsoft.
 
 ### Installation
 
 You can install MilestonePSTools on the computer where your Milestone VMS is installed, but that is not required. In fact, from a security standpoint it is best to avoid installing software on the same server as your VMS if it's not necessary. Just as the XProtect Smart Client and Management Client may be used from a networked PC, so too can MilestonePSTools be used from a remote system.
 
-1. Check PowerShell Execution Policy and consider switching to RemoteSigned if currently set to 'Restricted'
+You can copy & paste the script below into a PowerShell prompt, or PowerShell ISE, and as long as you have PowerShell 5.1 installed, it should get you up and running.
+
 ```powershell
-Get-ExecutionPolicy
-Set-ExecutionPolicy RemoteSigned
-```
-1b. Microsoft have improved security on their PSGallery repository. If you install MilestonePSTools using the Install-Module cmdlet, you might need to run the following to ensure TLS 1.2 is used for communication with PSGallery. Otherwise you may see a variety of different possible error messages when attempting to run Install-Module.
-```powershell
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 
-Install-Module PowerShellGet -RequiredVersion 2.2.4 -SkipPublisherCheck
-```
-2. Trust the PSGallery repository (optional)
-```powershell
+$script = @"
+Write-Host 'Setting SecurityProtocol to TLS 1.2, Execution Policy to RemoteSigned' -ForegroundColor Green
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Confirm:`$false -Force
+
+Write-Host 'Registering the NuGet package source if necessary' -ForegroundColor Green
+if (`$null -eq (Get-PackageSource -Name NuGet -ErrorAction Ignore)) {
+    `$null = Register-PackageSource -Name NuGet -Location https://www.nuget.org/api/v2 -ProviderName NuGet -Trusted -Force
+}
+
+Write-Host 'Installing the NuGet package provider' -ForegroundColor Green
+`$nugetProvider = Get-PackageProvider -Name NuGet -ErrorAction Ignore
+`$requiredVersion = [Microsoft.PackageManagement.Internal.Utility.Versions.FourPartVersion]::Parse('2.8.5.201')
+if (`$null -eq `$nugetProvider -or `$nugetProvider.Version -lt `$requiredVersion) {
+    `$null = Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
+}
+
+Write-Host 'Setting PSGallery as a trusted repository' -ForegroundColor Green
 Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+
+Write-Host 'Installing PowerShellGet 2.2.5 or greater if necessary' -ForegroundColor Green
+if (`$null -eq (Get-Module -ListAvailable PowerShellGet | Where-Object Version -ge 2.2.5)) {
+    `$null = Install-Module PowerShellGet -MinimumVersion 2.2.5 -Force
+}
+
+Write-Host 'Installing or updating MilestonePSTools' -ForegroundColor Green
+if (`$null -eq (Get-Module -ListAvailable MilestonePSTools)) {
+    Install-Module MilestonePSTools
+}
+else {
+    Update-Module MilestonePSTools
+}
+"@
+Start-Process -FilePath powershell.exe -ArgumentList "-Command $script" -Verb RunAs
 ```
-3. Install MilestonePSTools for your Windows profile
-```powershell
-Install-Module MilestonePSTools -Scope CurrentUser
-```
+
+### Holy moly that's a lot of PowerShell
+
+The script above may look intimidating, and you should _never_ copy and paste code of any kind if you don't know what it does. In short, the script is designed to make it as easy and fast as possible to get MilestonePSTools installed. Sometimes your PowerShell environment needs a few adjustments and updates to be able to install PowerShell modules. Let's break down what this actually does, just in case your boss asks!
+
+1. A script is launched in a new PowerShell instance requiring elevation
+2. Sets the HTTPS security protocol to TLS 1.2 which is required for communicating with [PSGallery](https://powershellgallery.com)
+3. Sets the execution policy to `RemoteSigned`. The default on Windows 10 is `Restricted` and that will prevent you from actually using any PowerShell modules. `RemoteSigned` means any scripts that are "blocked" must be signed.
+4. Registers [NuGet.org](https://www.nuget.org) as a package source. This is not strictly necessary, but can be useful if you need to install .NET packages from PowerShell, and in the future we may update MilestonePSTools to depend on the official [MIP SDK NuGet packages](https://www.nuget.org/profiles/milestonesys).
+5. Installs the NuGet package provider which is used by PowerShellGet as a source for installing PowerShell modules. You may have an older version of PowerShellGet so this will ensure it gets updated.
+6. Sets the PSGallery repository as a trusted source for PowerShell modules. This is not mandatory but will prevent you from having to acknowledge each module you install.
+7. Updates to the latest PowerShellGet module
+8. Installs/updates MilestonePSTools to `C:\Program Files\WindowsPowerShell\Modules\`
+
 
 <!-- USAGE EXAMPLES -->
 ## Usage
