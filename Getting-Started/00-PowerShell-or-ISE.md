@@ -2,11 +2,13 @@
 
 On an standard Windows operating system you typically have two choices for how to use PowerShell. More if you consider the x86 (32-bit) variants! When you''re getting started, it's difficult to know which to use, and why. When you click the Start menu button or press your Windows key (<kbd>⊞</kbd>), and type "powershell", here''s what you get...
 
-![start powershell](https://github.com/MilestoneSystemsInc/PowerShellSamples/blob/main/Getting-Started/images/Start-Menu.png?raw=true)
+![Start Menu screenshot showing PowerShell](https://github.com/MilestoneSystemsInc/PowerShellSamples/blob/main/Getting-Started/images/Start-Menu.png?raw=true)
 
 ## Windows PowerShell
 
 This is your go-to option for entering one command at a time to perform a simple, one-time task. It''s not great for writing out longer, complex scripts since every time you press <kbd>Enter</kbd> it will evaluate what you''ve typed and run it. I often use the Windows PowerShell terminal to run single commands like `ping`, and `Test-NetConnection`, or sometimes for one-off tasks that require multiple commands that I''m comfortable running in a terminal instead of an editer like ISE.
+
+![Windows PowerShell screenshot](https://github.com/MilestoneSystemsInc/PowerShellSamples/blob/main/Getting-Started/images/Windows-PowerShell.png?raw=true)
 
  ## Windows PowerShell ISE
 
@@ -15,6 +17,8 @@ This is your go-to option for entering one command at a time to perform a simple
  You can also run one or more lines of code at a time using <kbd>F8</kbd> or run the whole file using <kbd>F5</kbd>. When you get comfortable with PowerShell as a language, and the ISE environment, you can even add break points and *debug* your scripts when they do the unexpected.
 
  There are better environments to write PowerShell code in than the ISE. For instance, Visual Studio Code is a *free* editor from Microsoft with extensions for PowerShell which make it a far more productive environment for larger PowerShell projects. However, the ISE is available on *every* Windows computer and offers the least intimidating starting point for your PowerShell learning path.
+
+ ![PowerShell ISE screenshot](https://github.com/MilestoneSystemsInc/PowerShellSamples/blob/main/Getting-Started/images/PowerShell-ISE.png?raw=true)
 
 ## Windows PowerShell (x86) and Windows PowerShell ISE (x86)
 
