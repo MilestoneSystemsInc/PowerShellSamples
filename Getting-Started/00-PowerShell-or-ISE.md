@@ -2,7 +2,7 @@
 
 On an standard Windows operating system you typically have two choices for how to use PowerShell. More if you consider the x86 (32-bit) variants! When you''re getting started, it's difficult to know which to use, and why. When you click the Start menu button or press your Windows key (<kbd>⊞</kbd>), and type "powershell", here''s what you get...
 
-[[https://github.com/MilestoneSystemsInc/PowerShellSamples/blob/main/Getting-Started/images/Start-Menu.png|alt=start-powershell]]
+![start powershell](https://github.com/MilestoneSystemsInc/PowerShellSamples/blob/main/Getting-Started/images/Start-Menu.png?raw=true)
 
 ## Windows PowerShell
 
