@@ -28,6 +28,8 @@ These are the 32-bit equivalents of the same two PowerShell environments already
 
 Microsoft''s VSCode is a fantastic environment for working on many different kinds of projects from PowerShell, to HTML/CSS/JavaScript, to Python and more. It''s a text editor with extensions which make it a comfortable environment for working with multiple files of different types, and even running/executing code. It''s an integral part of the maintenance of MilestonePSTools and other PowerShell projects we''ve worked on and as you get more comfortable with PowerShell, I highly recommend trying it out. The script below will automate the installation of code, as well as my favorite extensions for working with PowerShell and GitHub.
 
+![Visual Studio Code screenshot](https://github.com/MilestoneSystemsInc/PowerShellSamples/blob/main/Getting-Started/images/VSCode.png?raw=true)
+
 ```powershell
 $InformationPreference = 'Continue'
 $requestParams = @{
