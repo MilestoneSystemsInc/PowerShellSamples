@@ -4,7 +4,7 @@ If your Milestone VMS is "air-gapped" or for any other reason you're unable to i
 
 ## Download the Nupkg files
 
-What on earth is a nupkg file? For starters, you can pronounce it as "Nup-keg" which is fun! And it stands for "NuGet Package". Oh, and NuGet is the name of Microsoft''s package manager introduced primarily for managing .NET application packages. In this case, "package" means one or more DLL files and some basic instructions for where they go. Back before ~2010, most .NET developers were manually copying around DLL files and adding references to them when needed. It made it very complicated to share reusable libraries. Now, with NuGet.org, you can reference a package by name, and automatically download/unpack/use that package.
+What on earth is a nupkg file? For starters, you can pronounce it as "Nup-keg" which is fun! And it stands for "NuGet Package". Oh, and NuGet is the name of Microsoft's package manager introduced primarily for managing .NET application packages. In this case, "package" means one or more DLL files and some basic instructions for where they go. Back before ~2010, most .NET developers were manually copying around DLL files and adding references to them when needed. It made it very complicated to share reusable libraries. Now, with NuGet.org, you can reference a package by name, and automatically download/unpack/use that package.
 
 To manually download MilestonePSTools, you'll need to download two files. The first is the MilestonePSTools "raw nupgk file", and the second is the MipSdkRedist nupkg. The MipSdkRedist module is the container used for the Milestone MIP SDK on which MilestonePSTools is based. Here are the links to the two PowerShell modules on PSGallery. Once there, click **Manual Download** under **Installation Options** and then click **Download the raw nupkg file**.
 
@@ -21,7 +21,7 @@ When you extract the files for the module, the best place to put them is in one 
 
 Alternatively if you want to make the module(s) available to any user on the local machine (useful if you want a service account, local system, or network service to access them from a scheduled task!), you can place them in `C:\Program Files\WindowsPowerShell\Modules`.
 
-The structure for the Modules folder is that the first level includes a folder matching the name of the module, and the subfolder contains one or more versions of that module where the name of the folder matches the exact version of the module as defined in the `*.psd1` file at the root of the specific module''s folder. In the example below, we have MilestonePSTools version 21.1.451603, and inside that folder are the contents from the screenshot above such that MilestonePSTools.psd1 exists inside the folder named "21.1.451603".
+The structure for the Modules folder is that the first level includes a folder matching the name of the module, and the subfolder contains one or more versions of that module where the name of the folder matches the exact version of the module as defined in the `*.psd1` file at the root of the specific module's folder. In the example below, we have MilestonePSTools version 21.1.451603, and inside that folder are the contents from the screenshot above such that MilestonePSTools.psd1 exists inside the folder named "21.1.451603".
 
 ```text
 +---Modules
