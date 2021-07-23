@@ -29,7 +29,7 @@ function Get-UsersInRoles {
     )
 
     process {
-        [bool]$resultFound
+        $resultFound = $false
         foreach ($role in Get-Role -Name $RoleName)
         {
             $resultFound = $true
