@@ -1,4 +1,5 @@
-function Set-AxisCameraSettings {
+function Set-AxisCameraSettingsNew
+{
     <#
     .SYNOPSIS
         Set Axis Zipstream settings, as well as frame rate
@@ -22,7 +23,7 @@ function Set-AxisCameraSettings {
         [Parameter(Mandatory = $true)]
         $RecordingServerName,
         [Parameter(Mandatory = $true)]
-        [ValidateSet("All","LiveDefault","Recorded")]
+        [ValidateSet("All","LiveDefault","Record")]
         $StreamType,
         [Parameter()]
         [ValidateRange(1,30)]
@@ -64,12 +65,12 @@ function Set-AxisCameraSettings {
                 {
                     $allStreams = $camera | Get-Stream -All
 
-                    if ($StreamType -eq "Recorded")
+                    if ($StreamType -eq "Record" -or $StreamType -eq "LiveDefault")
                     {
                         $streamNum = 0
                         foreach ($stream in $allStreams)
                         {
-                            if ($stream.Record -ne $true)
+                            if ($stream.$($StreamType) -ne $true)
                             {
                                 $streamNum++
                             } else
@@ -77,88 +78,58 @@ function Set-AxisCameraSettings {
                                 Break
                             }
                         }
-                    }
 
-                    if ($StreamType -eq "LiveDefault")
-                    {
-                        $streamNum = 0
-                        foreach ($stream in $allStreams)
-                        {
-                            if ($stream.LiveDefault -ne $true)
-                            {
-                                $streamNum++
-                            } else
-                            {
-                                Break
-                            }
-                        }
-                    }
-
-                    if ($StreamType -eq "Recorded" -or $StreamType -eq "LiveDefault")
-                    {
-                        $cameraSettings = $camera | Get-CameraSetting -Stream -StreamNumber $streamNum
-
-                        if ($null -ne $FPS -and $null -ne $cameraSettings.FPS)
-                        {
-                            $camera | Set-CameraSetting -Stream -StreamNumber $streamNum -Name FPS -Value $FPS
-                        }
-
-                        if ($null -ne $ZipstreamCompression -and $null -ne $cameraSettings.ZStrength)
-                        {
-                            $camera | Set-CameraSetting -Stream -StreamNumber $streamNum -Name ZStrength -Value $ZipstreamCompression
-                        }
-
-                        if ($null -ne $ZipstreamFPSMode -and $null -ne $cameraSettings.ZFpsMode)
-                        {
-                            $camera | Set-CameraSetting -Stream -StreamNumber $streamNum -Name ZFpsMode -Value $ZipstreamFPSMode
-                        }
-
-                        if ($null -ne $ZipstreamGOPMode -and $null -ne $cameraSettings.ZGopMode)
-                        {
-                            $camera | Set-CameraSetting -Stream -StreamNumber $streamNum -Name ZGopMode -Value $ZipstreamGOPMode
-                        }
-
-                        if ($null -ne $ZipstreamMaxGOPLength -and $null -ne $cameraSettings.ZGopLength)
-                        {
-                            $camera | Set-CameraSetting -Stream -StreamNumber $streamNum -Name ZGopLength -Value $ZipstreamMaxGOPLength
-                        }
+                        Set-AxisCameraSettingsHelper $camera $streamNum $FPS $ZipstreamCompression $ZipstreamFPSMode $ZipstreamGOPMode $ZipstreamMaxGOPLength
                     }
 
                     if ($StreamType -eq "All")
                     {
                         for ($streamNum = 0;$streamNum -lt $allStreams.Count;$streamNum++)
                         {
-                            $cameraSettings = $camera | Get-CameraSetting -Stream -StreamNumber $streamNum
-
-                            if ($null -ne $FPS -and $null -ne $cameraSettings.FPS)
-                            {
-                                $camera | Set-CameraSetting -Stream -StreamNumber $streamNum -Name FPS -Value $FPS
-                            }
-
-                            if ($null -ne $ZipstreamCompression -and $null -ne $cameraSettings.ZStrength)
-                            {
-                                $camera | Set-CameraSetting -Stream -StreamNumber $streamNum -Name ZStrength -Value $ZipstreamCompression
-                            }
-
-                            if ($null -ne $ZipstreamFPSMode -and $null -ne $cameraSettings.ZFpsMode)
-                            {
-                                $camera | Set-CameraSetting -Stream -StreamNumber $streamNum -Name ZFpsMode -Value $ZipstreamFPSMode
-                            }
-
-                            if ($null -ne $ZipstreamGOPMode -and $null -ne $cameraSettings.ZGopMode)
-                            {
-                                $camera | Set-CameraSetting -Stream -StreamNumber $streamNum -Name ZGopMode -Value $ZipstreamGOPMode
-                            }
-
-                            if ($null -ne $ZipstreamMaxGOPLength -and $null -ne $cameraSettings.ZGopLength)
-                            {
-                                $camera | Set-CameraSetting -Stream -StreamNumber $streamNum -Name ZGopLength -Value $ZipstreamMaxGOPLength
-                            }
+                            Set-AxisCameraSettingsHelper $camera $streamNum $FPS $ZipstreamCompression $ZipstreamFPSMode $ZipstreamGOPMode $ZipstreamMaxGOPLength
                         }
                     }
                 }
                 $hwProcessed++
             }
         }
+    }
+}
+
+function Set-AxisCameraSettingsHelper ($camera,$streamNum,$FPS,$ZipstreamCompression,$ZipstreamFPSMode,$ZipstreamGOPMode,$ZipstreamMaxGOPLength)
+{
+    <#
+    .SYNOPSIS
+        Don't run this script directly.  It gets run by Set-AxisCameraSettings.
+
+    .DESCRIPTION
+        Don't run this script directly.  It gets run by Set-AxisCameraSettings.
+    #>
+
+    $cameraSettings = $camera | Get-CameraSetting -Stream -StreamNumber $streamNum
+
+    if ($null -ne $FPS -and $null -ne $cameraSettings.FPS)
+    {
+        $camera | Set-CameraSetting -Stream -StreamNumber $streamNum -Name FPS -Value $FPS
+    }
+
+    if ($null -ne $ZipstreamCompression -and $null -ne $cameraSettings.ZStrength)
+    {
+        $camera | Set-CameraSetting -Stream -StreamNumber $streamNum -Name ZStrength -Value $ZipstreamCompression
+    }
+
+    if ($null -ne $ZipstreamFPSMode -and $null -ne $cameraSettings.ZFpsMode)
+    {
+        $camera | Set-CameraSetting -Stream -StreamNumber $streamNum -Name ZFpsMode -Value $ZipstreamFPSMode
+    }
+
+    if ($null -ne $ZipstreamGOPMode -and $null -ne $cameraSettings.ZGopMode)
+    {
+        $camera | Set-CameraSetting -Stream -StreamNumber $streamNum -Name ZGopMode -Value $ZipstreamGOPMode
+    }
+
+    if ($null -ne $ZipstreamMaxGOPLength -and $null -ne $cameraSettings.ZGopLength)
+    {
+        $camera | Set-CameraSetting -Stream -StreamNumber $streamNum -Name ZGopLength -Value $ZipstreamMaxGOPLength
     }
 }
