@@ -1,4 +1,4 @@
-function Set-AxisCameraSettingsNew
+function Set-AxisCameraSettings
 {
     <#
     .SYNOPSIS
