@@ -55,12 +55,13 @@ function Set-AxisCameraSettings
     {
         foreach ($rec in Get-RecordingServer -Name $RecordingServerName)
         {
+            Write-Progress -Activity "Recording Server $($rec.name)" -Id 1
             $hwProcessed = 1
-            $allAxisHardware = Get-Hardware | Where-Object {$_.Enabled -and ($_ | Get-HardwareSetting).ProductID -like "*Axis*"}
+            $allAxisHardware = $rec | Get-Hardware | Where-Object {$_.Enabled -and ($_ | Get-HardwareSetting).ProductID -like "*Axis*"}
             $hwQty = $allAxisHardware.Count
             foreach ($hardware in $allAxisHardware)
             {
-                Write-Progress -Activity "Processing hardware $($hwProcessed) of $($hwQty)" -PercentComplete ($hwProcessed / $hwQty * 100)
+                Write-Progress -Activity "Processing hardware $($hwProcessed) of $($hwQty)" -ParentId 1 -Id 2 -PercentComplete ($hwProcessed / $hwQty * 100)
                 foreach ($camera in $hardware | Get-Camera | Where-Object Enabled)
                 {
                     $allStreams = $camera | Get-Stream -All
