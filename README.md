@@ -66,7 +66,7 @@ MilestonePSTools is developed using the latest build of Milestone's MIP SDK. As 
 * Milestone XProtect VMS (XProtect Essential+, Express+, Professional+, Expert, or Corporate) 2014 or newer
 * Windows Desktop/Server edition (not compatible with PowerShell Core)
 * .NET Framework 4.7
-* PowerShell 5.1 or newer. Use `$PSVersionTable` to determine the PSVersion of your current PowerShell terminal. If you need to upgrade PowerShell, download Windows [Management Framework 5.1](https://www.microsoft.com/en-us/download/details.aspx?id=54616) from Microsoft.
+* PowerShell 5.1. Use `$PSVersionTable` to determine the PSVersion of your current PowerShell terminal. If you need to upgrade PowerShell, download Windows [Management Framework 5.1](https://www.microsoft.com/en-us/download/details.aspx?id=54616) from Microsoft.
 
 ### Installation
 
