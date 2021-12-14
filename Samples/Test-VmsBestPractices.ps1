@@ -11,27 +11,75 @@ function Test-VmsBestPractices
          - Dynamic GOP on record stream on Axis cameras unless Motion on keyframes is disabled
          - Hardware acceleration for motion detection disabled
          - Generate motion data for Smart Search disabled
-         - Flag if framerate on any stream is higher than 15fps
-         - Recording stream not set to best codec (e.g., set to MJPEG when h.264 is available)
+         - Can check if framerates are above, below or equal to a certain value.
+         - Recording stream not set to best codec (e.g., set to MJPEG when h.264 is available).  For this test, h.264 and h.265 are considered equal.
          - Record stream not set to highest resolution
          - If using Expert or Corporate, cameras not having more than one stream configured so that Adaptive Streaming can be used.
 
-        Checking the resolution and codec does not work on all cameras due to how some cameras display that information.
+        Checking the framerate, resolution, and codec does not work on all cameras due to how some cameras display that information.
 
     .EXAMPLE
         Test-VmsBestPractices
 
-        Creates a report of any cameras that have settings that are considered not best practices
+        Creates a report of any cameras that have settings that are considered not best practices.  This doesn't check the frame rate at all.
+
+    .EXAMPLE
+        Test-VmsBestPractices -FPSNotEqualTo 10
+
+        Creates a report of any cameras that have settings that are considered not best practices and if any cameras don't have their framerate set to 10fps
+
+    .EXAMPLE
+        Test-VmsBestPractices -FPSAbove 15
+
+        Creates a report of any cameras that have settings that are considered not best practices and if any cameras have a framerate above 15ps.
+
+    .EXAMPLE
+        Test-VmsBestPractices -FPSBelow 10
+
+        Creates a report of any cameras that have settings that are considered not best practices and if any cameras have a framerate below 10fps.
+
+    .EXAMPLE
+        Test-VmsBestPractices -FPSAbove 20 -FPSBelow 10
+
+        Creates a report of any cameras that have settings that are considered not best practices and if any cameras have a framerate above 20fps and below 10fps
     #>
 
-    $badPracticeCameraSettings = New-Object System.Collections.Generic.List[PSCustomObject]
+    [CmdletBinding(DefaultParameterSetName='AboveBelow')]
+    param (
+        [Parameter(Mandatory=$false,ParameterSetName='AboveBelow')]
+        [ValidateRange(1,120)]
+        $FPSAbove = "",
+        [Parameter(Mandatory=$false,ParameterSetName='AboveBelow')]
+        [ValidateRange(1,120)]
+        $FPSBelow = "",
+        [Parameter(Mandatory=$false,ParameterSetName='EqualTo')]
+        [ValidateRange(1,120)]
+        $FPSNotEqualTo = ""
+    )
 
+    if ($FPSAbove -ne "" -and $FPSBelow -ne "" -and $FPSAbove -le $FPSBelow)
+    {
+        Write-Host "The FPSAbove value must be greater than the FPSBelow value." -ForegroundColor Green
+        Break
+    }
+
+    $badPracticeCameraSettings = New-Object System.Collections.Generic.List[PSCustomObject]
+    $recQty = (Get-RecordingServer).count
+
+    $recProcessed = 0
     foreach ($rec in Get-RecordingServer)
     {
+        $hwProcessed = 0
+        $hwQty = ($rec.HardwareFolder.Hardwares | Where-Object Enabled).count
+        Write-Progress -Activity "Gathering information for Recording Server #$($recProcessed+1) of $($recQty)" -Id 1 -PercentComplete ($recProcessed / $recQty * 100)
         foreach ($hw in $rec | Get-Hardware | Where-Object Enabled)
         {
+            $camProcessed = 0
+            $camQty = ($hw.CameraFolder.Cameras | Where-Object Enabled).count
+            Write-Progress -Activity "Gathering information for hardware #$($hwProcessed+1) of $($hwQty)" -Id 2 -ParentId 1 -PercentComplete ($hwProcessed / $hwQty * 100)
             foreach ($cam in $hw | Get-Camera | Where-Object Enabled)
             {
+                Write-Progress -Activity "Gathering information for camera #$($camProcessed+1) of $($camQty)" -Id 3 -ParentId 2 -PercentComplete ($camProcessed / $camQty * 100)
                 $badSetting = $false
                 $motionSettings = $cam.MotionDetectionFolder.MotionDetections
 
@@ -113,23 +161,57 @@ function Test-VmsBestPractices
                     $badSetting = $true
                 }
 
-                # Check if frame rate is set above 15fps
+                # Check if frame rate of any enabled stream is above, below, or equal to a set value
                 if ($hw.Model -notlike "Universal*" -and $hw.Model -notlike "*StableFPS*" -and $hw.Model -notlike "*VideoPush*")
                 {
-                    $framerateAbove15FPS = $null
+                    $FramerateAbove = $null
+                    $FramerateBelow = $null
+                    $FramerateNotEqualTo = $null
+                    $framerate = $null
                     $streams = $cam | Get-Stream -All
                     for ($i=0;$i -lt $streams.length;$i++)
                     {
                         $streamSetting = $cam | Get-CameraSetting -Stream -StreamNumber $i
-                        $fps = [math]::Round($streamSetting.FPS,0)
-                        $framerate = [math]::Round($streamSetting.Framerate,0)
-                        if ([string]::IsNullOrEmpty($streamSetting.FPS -and [string]::IsNullOrEmpty($streamSetting.Framerate)))
+                        if ([string]::IsNullOrEmpty($streamSetting.FPS) -eq $false)
                         {
-                            $framerateAbove15FPS = "No framerate data available"
+                            $framerate = [math]::Round($streamSetting.FPS,0)
+                        } elseif ([string]::IsNullOrEmpty($streamSetting.Framerate) -eq $false)
+                        {
+                            $framerate = [math]::Round($streamSetting.Framerate,0)
+                        } else
+                        {
+                            $framerate = $null
+                        }
+
+                        #$fps = [math]::Round($streamSetting.FPS,0)
+                        #$framerate = [math]::Round($streamSetting.Framerate,0)
+                        if ($FPSAbove -ne "" -and $framerate -gt $FPSAbove)
+                        {
+                            [string]$FramerateAbove = $framerate
                             $badSetting = $true
-                        } elseif ($fps -gt 15 -or $framerate -gt 15)
+                        } elseif ($FPSAbove -ne "" -and $framerate -eq $null)
                         {
-                            $framerateAbove15FPS = $true
+                            $FramerateAbove = "No framerate data available"
+                            $badSetting = $true
+                        }
+
+                        if ($FPSBelow -ne "" -and $framerate -lt $FPSBelow)
+                        {
+                            [string]$FramerateBelow = $framerate
+                            $badSetting = $true
+                        } elseif ($FPSBelow -ne "" -and $framerate -eq $null)
+                        {
+                            $FramerateBelow = "No framerate data available"
+                            $badSetting = $true
+                        }
+
+                        if ($FPSNotEqualTo -ne "" -and $framerate -ne $FPSNotEqualTo)
+                        {
+                            [string]$FramerateNotEqualTo = $framerate
+                            $badSetting = $true
+                        } elseif ($FPSNotEqualTo -ne "" -and $framerate -eq $null)
+                        {
+                            $FramerateNotEqualTo = "No framerate data available"
                             $badSetting = $true
                         }
                     }
@@ -250,25 +332,33 @@ function Test-VmsBestPractices
                 if ($badSetting -eq $true)
                 {
                     $row = [PSCustomObject]@{
-                        'RecordingServer' = $rec.Name
-                        'HardwareName' = $hw.Name
-                        'CameraName' = $cam.Name
-                        'VMDAllFrames - DefaultGOP' = $allFramesDefaultGOP
-                        'KeyframesVMD - CustomGOP' = $keyframesCustomGOP
-                        'VMDAllFrames - ZipstreamFixedGOP' = $allFramesZipstreamFixedGOP
-                        'KeyframesVMD - ZipstreamDynamicGOP' = $keyframesZipstreamDynamicGOP
-                        'MotionDetectionResolution' = $motionDetectionResolution
-                        'GenerateMotionMetadata' = $generateMotionMetadata
-                        'HardwareAcceleratedMotion' = $hardwareAcceleratedMotion
-                        'FPSAbove15' = $framerateAbove15FPS
-                        'BestRecordingCodec' = $bestRecordingCodec
-                        'MaxResolutionForRecording' = $maxResolutionForRecording
-                        'AdaptiveStreaming' = $adaptiveStreaming
+                        "RecordingServer" = $rec.Name
+                        "HardwareName" = $hw.Name
+                        "CameraName" = $cam.Name
+                        "VMDAllFrames - DefaultGOP" = $allFramesDefaultGOP
+                        "KeyframesVMD - CustomGOP" = $keyframesCustomGOP
+                        "VMDAllFrames - ZipstreamFixedGOP" = $allFramesZipstreamFixedGOP
+                        "KeyframesVMD - ZipstreamDynamicGOP" = $keyframesZipstreamDynamicGOP
+                        "MotionDetectionResolution" = $motionDetectionResolution
+                        "GenerateMotionMetadata" = $generateMotionMetadata
+                        "HardwareAcceleratedMotion" = $hardwareAcceleratedMotion
+                        "FPSAbove$($FPSAbove)" = $FramerateAbove
+                        "FPSBelow$($FPSBelow)" = $FramerateBelow
+                        "FPSNotEqualTo$($FPSNotEqualTo)" = $FramerateNotEqualTo
+                        "BestRecordingCodec" = $bestRecordingCodec
+                        "MaxResolutionForRecording" = $maxResolutionForRecording
+                        "AdaptiveStreaming" = $adaptiveStreaming
                     }
                     $badPracticeCameraSettings.Add($row)
                 }
+                Write-Progress -Activity "Gathering information for camera #$($camProcessed+1) of $($camQty)" -Id 3 -ParentId 2 -PercentComplete ($camProcessed / $camQty * 100)
+                $camProcessed++
             }
+            Write-Progress -Activity "Gathering information for hardware #$($hwProcessed+1) of $($hwQty)" -Id 2 -ParentId 1 -PercentComplete ($hwProcessed / $hwQty * 100)
+            $hwProcessed++
         }
+        Write-Progress -Activity "Gathering information for Recording Server #$($recProcessed+1) of $($recQty)" -Id 1 -PercentComplete ($recProcessed / $recQty * 100)
+        $recProcessed++
     }
     $badPracticeCameraSettings
 }
