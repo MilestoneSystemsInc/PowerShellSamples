@@ -48,16 +48,16 @@ function Test-VmsBestPractices
     param (
         [Parameter(Mandatory=$false,ParameterSetName='AboveBelow')]
         [ValidateRange(1,120)]
-        $FPSAbove = "",
+        $FPSAbove,
         [Parameter(Mandatory=$false,ParameterSetName='AboveBelow')]
         [ValidateRange(1,120)]
-        $FPSBelow = "",
+        $FPSBelow,
         [Parameter(Mandatory=$false,ParameterSetName='EqualTo')]
         [ValidateRange(1,120)]
-        $FPSNotEqualTo = ""
+        $FPSNotEqualTo
     )
 
-    if ($FPSAbove -ne "" -and $FPSBelow -ne "" -and $FPSAbove -le $FPSBelow)
+    if ($null -ne $FPSAbove -and $null -ne $FPSBelow -and $FPSAbove -le $FPSBelow)
     {
         Write-Host "The FPSAbove value must be greater than the FPSBelow value." -ForegroundColor Green
         Break
@@ -69,6 +69,7 @@ function Test-VmsBestPractices
     $recProcessed = 0
     foreach ($rec in Get-RecordingServer)
     {
+        $svc = $rec | Get-RecorderStatusService2
         $hwProcessed = 0
         $hwQty = ($rec.HardwareFolder.Hardwares | Where-Object Enabled).count
         Write-Progress -Activity "Gathering information for Recording Server #$($recProcessed+1) of $($recQty)" -Id 1 -PercentComplete ($recProcessed / $recQty * 100)
@@ -161,58 +162,108 @@ function Test-VmsBestPractices
                     $badSetting = $true
                 }
 
+                $camStat = $svc.GetVideoDeviceStatistics((Get-Token),$cam.Id)
+                $streamStats = $camStat.VideoStreamStatisticsArray
+
                 # Check if frame rate of any enabled stream is above, below, or equal to a set value
-                if ($hw.Model -notlike "Universal*" -and $hw.Model -notlike "*StableFPS*" -and $hw.Model -notlike "*VideoPush*")
+                if ($hw.Model -notlike "Universal*" -and $hw.Model -notlike "*StableFPS*" -and $hw.Model -notlike "*VideoPush*" -and ($null -ne $FPSAbove -or $null -ne $FPSBelow -or $null -ne $FPSNotEqualTo))
                 {
                     $FramerateAbove = $null
                     $FramerateBelow = $null
                     $FramerateNotEqualTo = $null
                     $framerate = $null
-                    $streams = $cam | Get-Stream -All
-                    for ($i=0;$i -lt $streams.length;$i++)
+
+                    if ($streamStats.Count -gt 0)
                     {
-                        $streamSetting = $cam | Get-CameraSetting -Stream -StreamNumber $i
-                        if ([string]::IsNullOrEmpty($streamSetting.FPS) -eq $false)
+                        foreach ($streamStat in $streamStats)
                         {
-                            $framerate = [math]::Round($streamSetting.FPS,0)
-                        } elseif ([string]::IsNullOrEmpty($streamSetting.Framerate) -eq $false)
-                        {
-                            $framerate = [math]::Round($streamSetting.Framerate,0)
-                        } else
-                        {
-                            $framerate = $null
-                        }
+                            if (-not [double]::IsNaN($streamStat.FPSRequested))
+                            {
+                                $framerate = [math]::Round($streamStat.FPSRequested,0)
+                            } elseif (-not [double]::IsNaN($streamStat.FPS))
+                            {
+                                $framerate = [math]::Round($streamStat.FPS,0)
+                            } else
+                            {
+                                $framerate = $null
+                            }
 
-                        #$fps = [math]::Round($streamSetting.FPS,0)
-                        #$framerate = [math]::Round($streamSetting.Framerate,0)
-                        if ($FPSAbove -ne "" -and $framerate -gt $FPSAbove)
-                        {
-                            [string]$FramerateAbove = $framerate
-                            $badSetting = $true
-                        } elseif ($FPSAbove -ne "" -and $framerate -eq $null)
-                        {
-                            $FramerateAbove = "No framerate data available"
-                            $badSetting = $true
-                        }
+                            if ($null -ne $FPSAbove -and $framerate -gt $FPSAbove)
+                            {
+                                [string]$FramerateAbove = $framerate
+                                $badSetting = $true
+                            } elseif ($null -ne $FPSAbove -and $null -eq $framerate)
+                            {
+                                $FramerateAbove = "No framerate data available"
+                                $badSetting = $true
+                            }
 
-                        if ($FPSBelow -ne "" -and $framerate -lt $FPSBelow)
-                        {
-                            [string]$FramerateBelow = $framerate
-                            $badSetting = $true
-                        } elseif ($FPSBelow -ne "" -and $framerate -eq $null)
-                        {
-                            $FramerateBelow = "No framerate data available"
-                            $badSetting = $true
-                        }
+                            if ($null -ne $FPSBelow -and $framerate -lt $FPSBelow)
+                            {
+                                [string]$FramerateBelow = $framerate
+                                $badSetting = $true
+                            } elseif ($null -ne $FPSBelow -and $null -eq $framerate)
+                            {
+                                $FramerateBelow = "No framerate data available"
+                                $badSetting = $true
+                            }
 
-                        if ($FPSNotEqualTo -ne "" -and $framerate -ne $FPSNotEqualTo)
+                            if ($null -ne $FPSNotEqualTo -and $framerate -ne $FPSNotEqualTo)
+                            {
+                                [string]$FramerateNotEqualTo = $framerate
+                                $badSetting = $true
+                            } elseif ($null -ne $FPSNotEqualTo -and $null -eq $framerate)
+                            {
+                                $FramerateNotEqualTo = "No framerate data available"
+                                $badSetting = $true
+                            }
+                        }
+                    } else
+                    {
+                        $streams = $cam | Get-Stream -All
+                        for ($i=0;$i -lt $streams.length;$i++)
                         {
-                            [string]$FramerateNotEqualTo = $framerate
-                            $badSetting = $true
-                        } elseif ($FPSNotEqualTo -ne "" -and $framerate -eq $null)
-                        {
-                            $FramerateNotEqualTo = "No framerate data available"
-                            $badSetting = $true
+                            $streamSetting = $cam | Get-CameraSetting -Stream -StreamNumber $i
+                            if ([string]::IsNullOrEmpty($streamSetting.FPS) -eq $false)
+                            {
+                                $framerate = [math]::Round($streamSetting.FPS,0)
+                            } elseif ([string]::IsNullOrEmpty($streamSetting.Framerate) -eq $false)
+                            {
+                                $framerate = [math]::Round($streamSetting.Framerate,0)
+                            } else
+                            {
+                                $framerate = $null
+                            }
+
+                            if ($null -ne $FPSAbove -and $framerate -gt $FPSAbove)
+                            {
+                                [string]$FramerateAbove = $framerate
+                                $badSetting = $true
+                            } elseif ($null -ne $FPSAbove -and $null -eq $framerate)
+                            {
+                                $FramerateAbove = "No framerate data available"
+                                $badSetting = $true
+                            }
+
+                            if ($null -ne $FPSBelow -and $framerate -gt $FPSBelow)
+                            {
+                                [string]$FramerateBelow = $framerate
+                                $badSetting = $true
+                            } elseif ($null -ne $FPSBelow -and $null -eq $framerate)
+                            {
+                                $FramerateBelow = "No framerate data available"
+                                $badSetting = $true
+                            }
+
+                            if ($null -ne $FPSNotEqualTo -and $framerate -gt $FPSNotEqualTo)
+                            {
+                                [string]$FramerateNotEqualTo = $framerate
+                                $badSetting = $true
+                            } elseif ($null -ne $FPSNotEqualTo -and $null -eq $framerate)
+                            {
+                                $FramerateNotEqualTo = "No framerate data available"
+                                $badSetting = $true
+                            }
                         }
                     }
                 }
@@ -322,7 +373,7 @@ function Test-VmsBestPractices
                 if ((Get-LicenseInfo).DisplayName -like "*Corporate*" -or (Get-LicenseInfo).DisplayName -like "*Expert*" -and $hw.Model -notlike "Universal*" -and $hw.Model -notlike "*StableFPS*" -and $hw.Model -notlike "*VideoPush*")
                 {
                     $adaptiveStreaming = $null
-                    if ($streams.count -lt 2)
+                    if ($streams.count -lt 2 -and $streamStats.Count -lt 2)
                     {
                         $adaptiveStreaming = $false
                         $badSetting = $true
