@@ -9,7 +9,7 @@ function Group-CamerasByModel {
         [ValidateRange(1, 400)]
         $MaxGroupSize = 400
     )
-    
+
     process {
         # We perform the grouping in two steps. Step 1 is collection of models
         # into $camsByModel where we collect all camera GUIDs and sort them by
@@ -26,8 +26,8 @@ function Group-CamerasByModel {
                 $list = New-Object System.Collections.Generic.List[Guid]
                 $camsByModel.Add($model, $list)
             }
-            
-            $hw | Get-Camera | Where-Object Enabled | ForEach-Object {
+
+            $hw | Get-VmsCamera -EnableFilter Enabled | ForEach-Object {
                 $camsByModel[$model].Add($_.Id)
                 $totalCameras++
             }
@@ -69,6 +69,7 @@ function Group-CamerasByModel {
                     $groupName = "$first-$last"
                     Write-Verbose "Creating group $key/$groupName"
                     $group = Add-DeviceGroup -DeviceCategory Camera -Path "$BaseGroupPath/$key/$groupName"
+                    Clear-VmsCache
                 }
 
                 try {
@@ -76,7 +77,7 @@ function Group-CamerasByModel {
                 }
                 catch [VideoOS.Platform.ArgumentMIPException] {
                 }
-                
+
                 $camerasProcessed++
                 $positionInGroup++
                 if ($positionInGroup -gt $MaxGroupSize) {
