@@ -1,4 +1,21 @@
 function Group-CamerasByModel {
+    <#
+    .SYNOPSIS
+        Creates a camera group for each camera manufacturer and then a sub group for each model.
+    .DESCRIPTION
+        Creates a specified base group.  Within that base group, it creates a group for every camera manufacturer in the system.  Within each camera manufacturer group, it creates a group for each camera model.  For each camera model, it creates a group named 1-X where X is the number of cameras in that group.  If the number exceeds 400, it will create another group called 401-X, etc.  Do not create groups larger than 400 cameras as the Management Client will not be able to do bulk configurations on them.
+
+        Having groups of camera models is very useful for doing bulk configurations.  Note that in some instances, cameras report their models as a series of cameras and not a specific model.  In cases like this, bulk configuration will likely not work as the cameras in the series might support different resolutions and/or frame rates.
+    .EXAMPLE
+        PS C:\> Group-CamerasByModel -BaseGroupPath "CameraModels"
+
+        Creates a top-level group called "CameraModels".  All camera manufacturer and camera models will reside under that top-level group.
+    .EXAMPLE
+        PS C:\> Group-CamerasByModel -BaseGroupPath "CameraModels" -MaxGroupSize 200
+
+        Same as previous example except instead of splitting into new groups every 400 cameras of the same model, it will do it every 200 cameras.
+    #>
+
     [CmdletBinding()]
     param (
         [Parameter(Mandatory)]
