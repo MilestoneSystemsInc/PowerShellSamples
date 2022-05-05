@@ -7,39 +7,18 @@
 # This way, we stop the script if something goes wrong instead of proceeding with incomplete data
 $ErrorActionPreference = "Stop"
 
-
-function Get-ConnectionInfo {
-    <#
-    .SYNOPSIS
-        Capture Milestone server address and credentials, and verify it before returning that
-        data to the caller.
-    #>    
-    while ($true) {
-        $server = Read-Host -Prompt "Server address"
-        $credential = Get-Credential -Message "Milestone User Credential"
-        $basicUser = (Read-Host -Prompt "Basic user? (y/n)") -eq 'y'
-        
-        try {
-            Write-Information "Testing credentials for user $($credential.UserName) on server $server. . ."
-            Connect-ManagementServer -Server $server -Credential $credential -BasicUser:$basicUser
-            Write-Information "Successfully connected to Management Server"
-            Disconnect-ManagementServer
-            break
-        }
-        catch {
-            Write-Warning "Error: $($_.CategoryInfo.Reason). Please try again. . ."
-        }
-    }
-
-    @{
-        Server = $server
-        Credential = $credential
-        BasicUser = $basicUser
+# Present a login dialog and on successful login, store the properties we'll need to reconnect from the scheduled task in a hashtable.
+Connect-ManagementServer -ShowDialog -AcceptEula -Force
+$loginSettings = Get-LoginSettings
+$nc = $loginSettings.CredentialCache | Select-Object -First 1
+$config = @{
+    Connection = @{
+        ServerAddress = $loginSettings.Uri
+        Credential    = if ([string]::IsNullOrWhiteSpace($nc.UserName)) { $null } else { [pscredential]::new($nc.UserName, $nc.SecurePassword) }
+        BasicUser     = $loginSettings.IsBasicUser
+        AcceptEula    = $true
     }
 }
-
-# Get working Milestone server address and credentials
-$config = Get-ConnectionInfo
 
 # Get seconds between snapshots or the snapshot interval
 # Tests the user-input to make sure it's a valid integer before continuing
@@ -58,12 +37,13 @@ while ($true) {
 # Let the user select which cameras will be used. Note this gets the raw camera ids and even though
 # you can add cameras using a device group, only the cameras in that group at the time this script
 # is run will be included in the snapshot collection when the scheduled job is running.
-Connect-ManagementServer -Server $config.Server -Credential $config.Credential -BasicUser:$config.BasicUser
 do {
     [array]$cameraIds = (Select-Camera -AllowFolders -AllowServers -RemoveDuplicates -OutputAsItem).FQID.ObjectId
 } while ($cameraIds.Count -le 0)
-Disconnect-ManagementServer
 $config.CameraIds = $cameraIds
+
+Disconnect-ManagementServer
+
 
 # Save the server address, credentials and settings to an XML file.
 # PowerShell encrypts the password in the credential so that only the current
@@ -111,7 +91,8 @@ $null = Register-ScheduledJob -Name $jobName -ScheduledJobOption $options -Trigg
         
         $connected = $false
         Write-Log "Connecting to Management Server at $($config.Server) with user $($config.Credential.UserName). . ."
-        Connect-ManagementServer -Server $config.Server -Credential $config.Credential -BasicUser:$config.BasicUser
+        $connection = $config.Connection
+        Connect-ManagementServer @connection
         Write-Log "Connected"
         $connected = $true
                 
@@ -121,7 +102,7 @@ $null = Register-ScheduledJob -Name $jobName -ScheduledJobOption $options -Trigg
         while ($true) {
             $stopwatch.Restart()
             foreach ($id in $config.CameraIds) {
-                $camera = Get-Camera -Id $id
+                $camera = Get-VmsCamera -Id $id
                 $folder = Join-Path -Path $WorkingDirectory -ChildPath snapshots\$($camera.Name)\
                 if (-not (Test-Path -Path $folder)) {
                     Write-Log "Creating subfolder for camera $($camera.Name) at $folder"
