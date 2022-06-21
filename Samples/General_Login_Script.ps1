@@ -94,7 +94,7 @@ finally
     $ErrorActionPreference = $currentErrorActionPreference
 }
 
-$ms = Get-ManagementServer -ErrorAction Ignore
+$ms = Get-VmsManagementServer -ErrorAction Ignore
 if ($null -ne $ms)
 {
     Write-Host "`nSuccessfully connected to Management Server" -ForegroundColor Green

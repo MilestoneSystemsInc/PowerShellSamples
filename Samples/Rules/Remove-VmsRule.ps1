@@ -30,7 +30,7 @@ function Remove-VmsRule {
     )
 
     begin {
-        $ms = Get-ManagementServer -ErrorAction Ignore
+        $ms = Get-VmsManagementServer -ErrorAction Ignore
         if ($null -eq $ms) {
             throw "You must be connected to a Management Server. Use Connect-ManagementServer and then try again."
         }

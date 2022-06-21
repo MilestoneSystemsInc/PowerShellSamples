@@ -32,7 +32,7 @@ function Get-CameraGroupDeviceCount
     Import-Module -Name MilestonePSTools
 
     # Get Camera groups
-    $ms = Get-ManagementServer
+    $ms = Get-VmsManagementServer
     $cameraGroups = $ms.CameraGroupFolder.CameraGroups
     $cameraGroupInfo = New-Object System.Collections.Generic.List[PSCustomObject]
 
