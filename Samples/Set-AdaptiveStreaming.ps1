@@ -18,6 +18,12 @@
     .EXAMPLE
         Set-AdaptiveStreaming -StreamsPerCamera 1 -RecordingServerName "Milestone-Server"
 
+<<<<<<< HEAD
+        Configures each camera for just one stream only on the Recording Server named "Milestone-Server"
+    #>
+
+    [CmdletBinding()]
+=======
         Configures each camera for just one stream only on the Recording Server named "Milestone-Server".  This one doesn't set the frame rate.
     .EXAMPLE
         Set-AdaptiveStreaming -StreamsPerCamera 3 -RecordingServerName "*" -CameraName "Front Door Camera"
@@ -30,10 +36,18 @@
     #>
 
     [CmdletBinding(DefaultParameterSetName='default')]
+>>>>>>> cccb49f22dff8fde20a2c8f447519ff85e1e6fd4
     param (
         [Parameter(Mandatory=$true)]
         [ValidateRange(1,3)]
         [string]$StreamsPerCamera,
+<<<<<<< HEAD
+        [Parameter(Mandatory=$true)]
+        [ValidateRange(1,30)]
+        [decimal]$FPS,
+        [Parameter(Mandatory = $true)]
+        $RecordingServerName
+=======
         [Parameter(Mandatory=$false)]
         [ValidateRange(1,60)]
         $FPS = $null,
@@ -45,6 +59,7 @@
         $MaxResWidth,
         [Parameter(Mandatory=$true,ParameterSetName='ResWidth')]
         $MinResWidth
+>>>>>>> cccb49f22dff8fde20a2c8f447519ff85e1e6fd4
     )
 
     begin
@@ -89,6 +104,8 @@
                 {
                     Write-Progress -Activity "Configuring streams for camera #$($camProcessed) of $($camQty) (or possibly less)" -PercentComplete ($camProcessed / $camQty * 100)
                     $resolutions = ($cam | Get-VmsCameraStream -WarningAction SilentlyContinue)[0].ValueTypeInfo.Resolution
+<<<<<<< HEAD
+=======
                     $sortedResolutions = New-Object System.Collections.Generic.List[PSCustomObject]
                     foreach ($resolution in $resolutions.Value)
                     {
@@ -113,6 +130,7 @@
                     # If the camera has specific framerate values instead of a range, then we need to choose the framerate
                     # that is closest (but smaller than) to the specified framerate.
                     $newFPS = $FPS
+>>>>>>> cccb49f22dff8fde20a2c8f447519ff85e1e6fd4
                     if ($null -ne ($cam | Get-VmsCameraStream -WarningAction SilentlyContinue)[0].ValueTypeInfo.fps)
                     {
                         $framerates = ($cam | Get-VmsCameraStream -WarningAction SilentlyContinue)[0].ValueTypeInfo.fps
@@ -121,6 +139,11 @@
                         $framerates = ($cam | Get-VmsCameraStream -WarningAction SilentlyContinue)[0].ValueTypeInfo.framerate
                     }
 
+<<<<<<< HEAD
+                    # If the camera has specific framerate values instead of a range, then we need to choose the framerate
+                    # that is closest (but smaller than) to the specified framerate.
+=======
+>>>>>>> cccb49f22dff8fde20a2c8f447519ff85e1e6fd4
                     if ($framerates.Name -notcontains "MinValue" -and $framerates.Value -notcontains $FPS)
                     {
                         $sortedFramerates = @()
@@ -136,14 +159,20 @@
                         {
                             if ($framerate -gt $FPS)
                             {
+<<<<<<< HEAD
+                                $FPS = $previousFramerate
+=======
                                 Write-Warning "$($cam.Name) is not capable of $($newFPS). It will be set to $($previousFramerate)."
                                 $newFPS = $previousFramerate
                                 Break
+>>>>>>> cccb49f22dff8fde20a2c8f447519ff85e1e6fd4
                             }
                             $previousFramerate = $framerate
                         }
                     }
 
+<<<<<<< HEAD
+=======
                     # If the maximum framerate of the camera is less than the framerate specified, then use the maximum framerate of the camera
                     $maxSupportedFramerate = ($framerates.Value | Measure-Object -Maximum).Maximum
                     if ($newFPS -gt $maxSupportedFramerate -and $null -ne $maxSupportedFramerate)
@@ -155,6 +184,7 @@
 
 
                     # If there aren't any resolution options, move to the next camera.
+>>>>>>> cccb49f22dff8fde20a2c8f447519ff85e1e6fd4
                     if ([string]::IsNullOrEmpty($resolutions))
                     {
                         $camProcessed++
@@ -208,9 +238,38 @@
                     }
                     $allStreams = $cam | Get-VmsCameraStream #| Where-Object Enabled
 
+<<<<<<< HEAD
+                    # Set Max Resolution on Stream 1 and set framerate
+                    if ($current -ne $resolutions[0].value -and $null -ne $totalSupportedStreams[0].Settings.FPS)
+                    {
+                        $settings = @{
+                            Resolution = $max
+                            FPS = $FPS
+                        }
+                        $totalSupportedStreams[0] | Set-VmsCameraStream -Settings $settings
+                    } elseif ($current -ne $resolutions[0].value -and $null -ne $totalSupportedStreams[0].Settings.Framerate) {
+                        $settings = @{
+                            Resolution = $max
+                            Framerate = $FPS
+                        }
+                        $totalSupportedStreams[0] | Set-VmsCameraStream -Settings $settings
+                    } elseif ($current -ne $resolutions[0].value) {
+                        $settings = @{
+                            Resolution = $max
+                        }
+                        $totalSupportedStreams[0] | Set-VmsCameraStream -Settings $settings
+                    }
+
+                    $enabledStreams = $totalSupportedStreams | Where-Object Enabled
+
+                    # Enable additional streams
+                    $j = 1
+                    while ($enabledStreams.length -lt $streamsPerCamera -and $enabledStreams.length -lt $totalSupportedStreams.Length -and $totalSupportedStreams.length -gt 1)
+=======
                     # Disable all streams except for the first one
                     $allStreams[0] | Set-VmsCameraStream -LiveDefault -Recorded
                     for ($i=1;$i -lt $allStreams.length;$i++)
+>>>>>>> cccb49f22dff8fde20a2c8f447519ff85e1e6fd4
                     {
                         #if ($i -ge $streamsPerCamera)
                         #{
@@ -289,6 +348,42 @@
 
                     foreach ($stream in $streamResolution)
                     {
+<<<<<<< HEAD
+
+                        if ($camRes[$i] -eq $current)
+                        {
+                            $i++
+                        }
+
+                        if ($x -lt $streamsPerCamera)
+                        {
+                            if ((($cam | Get-VmsCameraStream)[$x]).Settings.Resolution -ne $camRes[$i] -and $null -ne $enabledStreams[$x] -and $totalSupportedStreams.length -gt 1)
+                            {
+                                if ($null -ne $totalSupportedStreams[$x].Settings.FPS)
+                                {
+                                    $settings = @{
+                                        Resolution = $camRes[$i]
+                                        FPS = $FPS
+                                    }
+                                    $enabledStreams[$x] | Set-VmsCameraStream -Settings $settings
+                                } elseif ($null -ne $totalSupportedStreams[$x].Settings.Framerate)
+                                {
+                                    $settings = @{
+                                        Resolution = $camRes[$i]
+                                        Framerate = $FPS
+                                    }
+                                    $enabledStreams[$x] | Set-VmsCameraStream -Settings $settings
+                                } else
+                                {
+                                    $settings = @{
+                                        Resolution = $camRes[$i]
+                                    }
+                                    $enabledStreams[$x] | Set-VmsCameraStream -Settings $settings
+                                }
+                            }
+                            $x++
+                         }
+=======
                         if ($null -ne $stream.stream.Settings.FPS)
                         {
                             switch($FPS)
@@ -315,6 +410,7 @@
                             $stream.Stream | Set-VmsCameraStream -Settings $settings
                             $dumb
                         }
+>>>>>>> cccb49f22dff8fde20a2c8f447519ff85e1e6fd4
                     }
 
                     $lastStream = $cam | Get-VmsCameraStream | Where-Object Enabled | Select-Object -Last 1
