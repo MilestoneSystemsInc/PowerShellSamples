@@ -26,7 +26,7 @@
     .EXAMPLE
         Set-AdaptiveStreaming -StreamsPerCamera 3 -FPS 10 -RecordingServerName "Milestone-Server" -MaxResWidth 3840 -MinResWidth 1921
 
-        All cameras that have a maximum resolution width of 3840 and minimum resolution width of 1921 on Recording Server Milestone-Server will be configured with 3 streams and frame rate of 10.  
+        All cameras that have a maximum resolution width of 3840 and minimum resolution width of 1921 on Recording Server Milestone-Server will be configured with 3 streams and frame rate of 10.
     #>
 
     [CmdletBinding(DefaultParameterSetName='default')]
@@ -150,7 +150,7 @@
                     {
                         Write-Warning "$($cam.Name) is not capable of $($newFPS) FPS. It will be set to its max framerate of $($maxSupportedFramerate) FPS."
                         $newFPS = $maxSupportedFramerate
-                        
+
                     }
 
 
@@ -180,10 +180,10 @@
                     # Get the aspect ratio of the resolution on the first stream
                     $resW,$resH = $max.Split("x")
                     $ratio = $resW / $resH
-                    
+
                     # Get all of the available camera streams
                     $totalSupportedStreams = $cam | Get-VmsCameraStream
-                       
+
                     # Set Max Resolution on Stream 1 and set framerate if provided
                     if ($current -ne $resolutions[0].value -and $null -ne $totalSupportedStreams[0].Settings.FPS)
                     {
@@ -203,7 +203,7 @@
                     } elseif ($current -ne $resolutions[0].value) {
                         $settings = @{
                             Resolution = $max
-                        } 
+                        }
                         $totalSupportedStreams[0] | Set-VmsCameraStream -Settings $settings -WarningAction SilentlyContinue
                     }
                     $allStreams = $cam | Get-VmsCameraStream #| Where-Object Enabled
@@ -228,7 +228,7 @@
                         {
                             if ((($cam | Get-VmsCameraStream -WarningAction SilentlyContinue)[$k]).Name -match "JPEG")
                             {
-                                $extra += 1                            
+                                $extra += 1
                                 Continue
                             }
                             $resolutions = ($cam | Get-VmsCameraStream -WarningAction SilentlyContinue)[$k].ValueTypeInfo.Resolution
@@ -283,7 +283,7 @@
                                     Break
                                 }
                             }
-                            $previousStreamResMP = $r.Megapixel                        
+                            $previousStreamResMP = $r.Megapixel
                         }
                     }
 
