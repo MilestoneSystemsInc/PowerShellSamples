@@ -7,11 +7,11 @@ function Group-CamerasByModel {
 
         Having groups of camera models is very useful for doing bulk configurations.  Note that in some instances, cameras report their models as a series of cameras and not a specific model.  In cases like this, bulk configuration will likely not work as the cameras in the series might support different resolutions and/or frame rates.
     .EXAMPLE
-        PS C:\> Group-CamerasByModel -BaseGroupPath "CameraModels"
+        Group-CamerasByModel -BaseGroupPath "CameraModels"
 
         Creates a top-level group called "CameraModels".  All camera manufacturer and camera models will reside under that top-level group.
     .EXAMPLE
-        PS C:\> Group-CamerasByModel -BaseGroupPath "CameraModels" -MaxGroupSize 200
+        Group-CamerasByModel -BaseGroupPath "CameraModels" -MaxGroupSize 200
 
         Same as previous example except instead of splitting into new groups every 400 cameras of the same model, it will do it every 200 cameras.
     #>
