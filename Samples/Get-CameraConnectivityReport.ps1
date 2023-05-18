@@ -22,7 +22,7 @@ function Get-CameraConnectivityReport {
     $commErrors = Get-VmsLog -LogType System -StartTime (Get-Date).AddDays(-$DurationDays) -EndTime (Get-Date) | Where-Object {$_.'Message text' -eq "Communication error." -and $_.'Source type' -eq "Device"}
     $groupedCommErrors = $commErrors.'Source name' | Group-Object
 
-    foreach($rec in Get-VmsRecordingServer -Name "JMT-XPCO")
+    foreach($rec in Get-VmsRecordingServer)
     {
         $deviceStatus = Get-VmsDeviceStatus -RecordingServerId $rec.Id -DeviceType Camera
         foreach($hw in $rec | Get-VmsHardware | Where-Object Enabled)
