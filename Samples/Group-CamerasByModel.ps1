@@ -36,7 +36,7 @@ function Group-CamerasByModel {
         Write-Verbose "Gathering hardware information"
         Write-Progress -Activity "Collecting camera information"
         $totalCameras = 0
-        foreach ($hw in Get-Hardware | Where-Object Enabled) {
+        foreach ($hw in Get-VmsHardware | Where-Object Enabled) {
             $model = $hw.Model.Replace('/', '`/')
             if (-not $camsByModel.ContainsKey($model)) {
                 Write-Verbose "Discovered model '$model'"
@@ -52,22 +52,11 @@ function Group-CamerasByModel {
         }
         Write-Progress -Activity "Collecting camera information" -Completed
 
-        try {
-            # Remove the camera group at $BaseGroupPath if it exists
-            # If we don't, then the groups will be a bit weird on subsequent
-            # executions, and some stale groups could remain after device removals
-            $group = Get-DeviceGroup -DeviceCategory camera -Path $BaseGroupPath
-            $parentFolder = Get-ConfigurationItem -Path $group.ParentPath
-            $taskInfo = $parentFolder | Invoke-Method -MethodId RemoveDeviceGroup
-            ($taskInfo.Properties | Where-Object Key -eq "RemoveMembers").Value = "True"
-            ($taskInfo.Properties | Where-Object Key -eq "ItemSelection").Value = $group.Path
-            $task = $taskInfo | Invoke-Method -MethodId "RemoveDeviceGroup"
-            if (($task.Properties | Where-Object Key -eq "State").Value -ne "Success") {
-                throw "Error removing device group. Result:`r`n$($task | ConvertTo-Json)"
-            }
-        }
-        catch [VideoOS.Platform.PathNotFoundMIPException] {
-        }
+        # Remove the camera group at $BaseGroupPath if it exists
+        # If we don't, then the groups will be a bit weird on subsequent
+        # executions, and some stale groups could remain after device removals
+        Clear-VmsCache
+        Get-VmsDeviceGroup -Path $BaseGroupPath -ErrorAction SilentlyContinue | Remove-VmsDeviceGroup -Recurse -Confirm:$false -ErrorAction Stop
 
         $camerasProcessed = 0
         foreach ($key in $camsByModel.Keys) {
@@ -85,12 +74,12 @@ function Group-CamerasByModel {
                     }
                     $groupName = "$first-$last"
                     Write-Verbose "Creating group $key/$groupName"
-                    $group = Add-DeviceGroup -DeviceCategory Camera -Path "$BaseGroupPath/$key/$groupName"
+                    $group = New-VmsDeviceGroup -Type Camera -Path "$BaseGroupPath/$key/$groupName"
                     Clear-VmsCache
                 }
 
                 try {
-                    $null = $group.CameraFolder.AddDeviceGroupMember("Camera[$($camsByModel[$key][$i])]")
+                    $null = Add-VmsDeviceGroupMember -Group $group -DeviceId $camsByModel[$key][$i]
                 }
                 catch [VideoOS.Platform.ArgumentMIPException] {
                 }
@@ -102,8 +91,8 @@ function Group-CamerasByModel {
                     $positionInGroup = 1
                     $groupNumber++
                 }
-            } # for ($i = 0; $i -lt $camsByModel[$key].Count; $i++)
-        } # foreach ($key in $camsByModel.Keys)
+            }
+        }
         Write-Progress -Activity "Building camera groups" -Status "Done" -PercentComplete 100 -Completed
     }
 }
