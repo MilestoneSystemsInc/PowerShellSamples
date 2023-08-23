@@ -10,6 +10,16 @@ function Export-VmsLotsOfVideo {
     )
     
     process {
+        $rsService = Get-Service -Name 'Milestone XProtect Recording Server' -ErrorAction SilentlyContinue
+        if ([string]::IsNullOrEmpty($rsService))
+        {
+            Write-Warning "This script needs to be run on the Recording Server containing the video. Please try again."
+            Break
+        } elseif ($rsService.Status -eq 'Running') {
+            Write-Warning "The Recording Server service must be stopped before running this script. Please try again."
+            Break
+        }
+        
         if ((Get-ChildItem -Path $NewStoragePath -Force -ErrorAction SilentlyContinue | Measure-Object).Count -ne 0)
         {
             Write-Warning "'NewStoragePath' directory is not empty. Please use an empty directory."
