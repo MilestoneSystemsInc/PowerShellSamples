@@ -114,18 +114,27 @@ function Export-VmsLotsOfVideo {
     }
 
     end {
+        $folderQty = $videoFolders.Path.Count
+        $i = 0
         foreach ($folder in $videoFolders)
         {
+            Write-Progress -Activity "Copying $($folder.Path) to $($NewStoragePath)" -Id 1 -PercentComplete (($i / $folderQty) * 100)
             #robocopy /E /COPYALL /DCOPY:DAT $($folder.Path) "$($NewStoragePath)\$($folder.StorageId)" *.*
             $index = ($folder.Path).LastIndexOf('\')+1
             $newFolderName = $folder.Path.Substring($index,$folder.Path.Length - $index)
             Copy-Item -Path $folder.Path -Destination "$($NewStoragePath)\$($folder.StorageId)\$($newFolderName)" -Recurse -Container -Force
-
+            $i++
         }
+        Write-Progress -Activity "Copying $($folder.Path) to $($NewStoragePath)" -Id 1 -PercentComplete 100 -Completed
 
+        $subFolderQty = ((Get-ChildItem -Path $NewStoragePath -Directory -Recurse -Depth 1).Count - $storageInfo.Count) + ((Get-ChildItem -Path $NewStoragePath -Directory -Recurse -Depth 1).Count * 4)
+        $j = 0
         Get-ChildItem -Path $NewStoragePath -Directory -Recurse | ForEach-Object {
+            Write-Progress -Activity "Setting 'System' attribute on $($_.FullName)." -Id 2 -PercentComplete (($j / $subFolderQty) * 100)
             & attrib +S $_.FullName
+            $j++
         }
+        Write-Progress -Activity "Setting 'System' attribute on $($_.FullName)." -Id 2 -PercentComplete 100 -Completed
     }
 }
 
