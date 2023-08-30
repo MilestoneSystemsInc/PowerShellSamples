@@ -83,10 +83,20 @@
         $config = $svc.GetConfiguration((Get-Token))
         if ($RecordingServerName -eq "*")
         {
-            $camQty = $config.Recorders.Cameras.Count
+            if ([string]::IsNullOrEmpty($CameraName))
+            {
+                $camQty = $config.Recorders.Cameras.Count
+            } else {
+                $camQty = 1
+            }
         } else
         {
-            $camQty = ($config.Recorders | Where-Object {$_.Name -eq $RecordingServerName}).Cameras.Count
+            if ([string]::IsNullOrEmpty($CameraName))
+            {
+                $camQty = ($config.Recorders | Where-Object {$_.Name -eq $RecordingServerName}).Cameras.Count
+            } else {
+                $camQty = 1
+            }
         }
         $camProcessed = 1
 
@@ -101,7 +111,7 @@
             {
                 foreach ($cam in $hw | Get-VmsCamera -EnableFilter Enable -Name $CameraName)
                 {
-                    Write-Progress -Activity "Configuring streams for camera #$($camProcessed) of $($camQty) (or possibly less)" -PercentComplete ($camProcessed / $camQty * 100)
+                    Write-Progress -Activity "Configuring streams for camera $($camProcessed) of $($camQty) (or possibly less)" -PercentComplete ($camProcessed / $camQty * 100)
                     $resolutions = ($cam | Get-VmsCameraStream -WarningAction SilentlyContinue)[0].ValueTypeInfo.Resolution
                     $sortedResolutions = New-Object System.Collections.Generic.List[PSCustomObject]
                     foreach ($resolution in $resolutions.Value)
