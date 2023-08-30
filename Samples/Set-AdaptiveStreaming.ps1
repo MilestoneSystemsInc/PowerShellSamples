@@ -33,22 +33,36 @@
     param (
         [Parameter(Mandatory=$true)]
         [ValidateRange(1,3)]
-        [string]$StreamsPerCamera,
+        [string]
+        $StreamsPerCamera,
         [Parameter(Mandatory=$false)]
         [ValidateRange(1,60)]
         $FPS = $null,
         [Parameter(Mandatory=$true)]
+        [string]
         $RecordingServerName,
         [Parameter(Mandatory=$false)]
+        [string]
         $CameraName,
         [Parameter(Mandatory=$true,ParameterSetName='ResWidth')]
-        $MaxResWidth,
+        $MaxLiveResWidth,
         [Parameter(Mandatory=$true,ParameterSetName='ResWidth')]
-        $MinResWidth
+        $MinLiveResWidth,
+        [Parameter(Mandatory=$false)]
+        [switch]
+        $ConfigureAdaptivePlayback
+
     )
 
     begin
     {
+        $ms = Get-VmsManagementServer
+        if ($ConfigureAdaptivePlayback -and [version]$ms.Version -lt [version]"23.2")
+        {
+            Write-Warning "Version $($ms.Version) does not support adaptive playback. Please run again without the -ConfigureAdaptivePlayback switch."
+            Break
+        }
+
         if ($RecordingServerName -ne "*" -and (Get-RecordingServer).Name -notcontains $RecordingServerName)
         {
             Write-Warning "Recording Server does not exist.  Please check spelling and try again."
@@ -102,9 +116,9 @@
                     }
                     $resolutions = ($sortedResolutions | Sort-Object -Property Megapixel -Descending).Resolution
 
-                    if ($null -ne $MaxResWidth -and $null -ne $MinResWidth)
+                    if ($null -ne $MaxLiveResWidth -and $null -ne $MinLiveResWidth)
                     {
-                        if ($resolutions.Split("x")[0] -gt $MaxResWidth -or $resolutions.Split("x")[1] -lt $MinResWidth)
+                        if ($resolutions.Split("x")[0] -gt $MaxLiveResWidth -or $resolutions.Split("x")[1] -lt $MinLiveResWidth)
                         {
                             Break
                         }
@@ -209,7 +223,7 @@
                     $allStreams = $cam | Get-VmsCameraStream #| Where-Object Enabled
 
                     # Disable all streams except for the first one
-                    $allStreams[0] | Set-VmsCameraStream -LiveDefault -Recorded
+                    $allStreams[0] | Set-VmsCameraStream -LiveDefault -RecordingTrack Primary
                     for ($i=1;$i -lt $allStreams.length;$i++)
                     {
                         #if ($i -ge $streamsPerCamera)
@@ -267,7 +281,6 @@
                             {
                                 $totalSupportedStreams[$k] | Set-VmsCameraStream -LiveMode WhenNeeded
                                 $enabledStreams = $cam | Get-VmsCameraStream -Enabled
-                                #$j++
                             }
 
                             foreach ($r in $camRes)
@@ -318,7 +331,12 @@
                     }
 
                     $lastStream = $cam | Get-VmsCameraStream | Where-Object Enabled | Select-Object -Last 1
-                    $lastStream | Set-VmsCameraStream -LiveDefault
+                    if ($ConfigureAdaptivePlayback)
+                    {
+                        $lastStream | Set-VmsCameraStream -LiveDefault -RecordingTrack Secondary -PlaybackDefault
+                    } else {
+                        $lastStream | Set-VmsCameraStream -LiveDefault
+                    }
                     $camProcessed++
                 }
             }
