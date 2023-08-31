@@ -78,6 +78,8 @@
             Write-Warning "Camera does not exist.  Please check spelling and try again."
             Return
         }
+
+        $defaultStreamsPerCamera = $StreamsPerCamera
     }
 
     process
@@ -116,6 +118,18 @@
                 foreach ($cam in $hw | Get-VmsCamera -EnableFilter Enable -Name $CameraName)
                 {
                     Write-Progress -Activity "Configuring streams for camera $($camProcessed) of $($camQty) (or possibly less)" -PercentComplete ($camProcessed / $camQty * 100)
+
+                    # Get all streams that support a codec other than just JPEG/MJPEG
+                    $totalSupportedStreams = $cam | Get-VmsCameraStream -WarningAction SilentlyContinue | Where-Object {$_.ValueTypeInfo.Codec.Value -ne 'JPEG' -and $_.ValueTypeInfo.Codec.Value -ne 'MJPEG'}
+
+                    if ($totalSupportedStreams.Count -eq 0)
+                    {
+                        Continue
+                    } elseif ($totalSupportedStreams.Count -lt $StreamsPerCamera) {
+                        $StreamsPerCamera = $totalSupportedStreams.Count
+                    } else {
+                        $StreamsPerCamera = $defaultStreamsPerCamera
+                    }
 
                     $resolutions = ($cam | Get-VmsCameraStream -WarningAction SilentlyContinue)[0].ValueTypeInfo.Resolution
                     $sortedResolutions = New-Object System.Collections.Generic.List[PSCustomObject]
@@ -214,9 +228,6 @@
                     $resW,$resH = $max.Split("x")
                     $ratio = $resW / $resH
 
-                    # Get all of the available camera streams
-                    $totalSupportedStreams = $cam | Get-VmsCameraStream
-
                     # Set Max Resolution on Stream 1 and set framerate if provided
                     if ($current -ne $resolutions[0].value -and $null -ne $totalSupportedStreams[0].Settings.FPS)
                     {
@@ -251,7 +262,7 @@
 
                     # Enable additional streams and find appropriate resolution
                     $streamResolution = New-Object System.Collections.Generic.List[PSCustomObject]
-                    if ($enabledStreams.length -lt $streamsPerCamera -and $enabledStreams.length -lt $totalSupportedStreams.Length -and $totalSupportedStreams.length -gt 1)
+                    if ($enabledStreams.length -lt $StreamsPerCamera -and $enabledStreams.length -lt $totalSupportedStreams.Length -and $totalSupportedStreams.length -gt 1)
                     {
                         $extra = 0
                         for ($k=1;$k -lt [int]$StreamsPerCamera+$extra;$k++)
@@ -261,7 +272,15 @@
                                 $extra += 1
                                 Continue
                             }
-                            $resolutions = ($cam | Get-VmsCameraStream -WarningAction SilentlyContinue)[$k].ValueTypeInfo.Resolution
+                            $streamValueTypeInfo = ($cam | Get-VmsCameraStream -WarningAction SilentlyContinue)[$k].ValueTypeInfo
+                            $codecs = $streamValueTypeInfo.Codec
+                            if (($codecs.Value -eq 'MJPEG') -eq $true -or ($codecs.Value -eq 'JPEG') -eq $true )
+                            {
+                                $extra += 1
+                                Continue
+                            }
+                            $resolutions = $streamValueTypeInfo.Resolution
+                            
                             $sortedResolutions = New-Object System.Collections.Generic.List[PSCustomObject]
                             foreach ($resolution in $resolutions)
                             {
