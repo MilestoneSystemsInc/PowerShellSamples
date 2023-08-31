@@ -8,9 +8,9 @@
         (which will be the lowest resolution) is set as the default live stream. If -ConfigureAdaptivePlayback (supported on 2023 R2 and newer) is used,
         it will also set the lowest resolution stream of the configured live streams to be the Secondary Record stream and also the default playback stream.
 
-        There will be scenarios where this might create a strange configuration such as setting a JPEG only stream as the record stream or making the the
-        lowest resolution stream a JPEG only stream. It is recommended to run a Get-VmsCameraReport to at least check if the Record or Default Live streams
-        are configured for MJPEG.
+        This script does not change the codec. If a stream only supports JPEG/MJPEG, then it won't be used. However, if a stream is set to JPEG/MJPEG but
+        supports other codecs, it will be used but the codec won't be changed. It is recommended to run a Get-VmsCameraReport to check if any streams are
+        configured for JPEG/MJPEG.
     .EXAMPLE
         Set-AdaptiveStreaming -StreamsPerCamera 3 -FPS 15 -RecordingServerName "*"
 
