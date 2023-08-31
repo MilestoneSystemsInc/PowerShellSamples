@@ -55,19 +55,19 @@
         [Parameter(Mandatory=$false)]
         [switch]
         $ConfigureAdaptivePlayback
-
     )
 
     begin
     {
         $ms = Get-VmsManagementServer
+        $recs = Get-VmsRecordingServer -Name $RecordingServerName
         if ($ConfigureAdaptivePlayback -and [version]$ms.Version -lt [version]"23.2")
         {
             Write-Warning "Version $($ms.Version) does not support adaptive playback. Please run again without the -ConfigureAdaptivePlayback switch."
             Break
         }
 
-        if ($RecordingServerName -ne "*" -and (Get-RecordingServer).Name -notcontains $RecordingServerName)
+        if ($RecordingServerName -ne "*" -and $recs.Name -notcontains $RecordingServerName)
         {
             Write-Warning "Recording Server does not exist.  Please check spelling and try again."
             Return
@@ -82,7 +82,7 @@
 
     process
     {
-        Get-Site | Select-Site
+        Clear-VmsCache
         $svc = Get-IServerCommandService
         $config = $svc.GetConfiguration((Get-Token))
         if ($RecordingServerName -eq "*")
@@ -109,9 +109,9 @@
             [decimal]$FPS = $FPS
         }
 
-        foreach ($rec in Get-RecordingServer -Name $RecordingServerName)
+        foreach ($rec in $recs)
         {
-            foreach ($hw in $rec | Get-Hardware | Where-Object Enabled)
+            foreach ($hw in $rec | Get-VmsHardware | Where-Object Enabled)
             {
                 foreach ($cam in $hw | Get-VmsCamera -EnableFilter Enable -Name $CameraName)
                 {
@@ -122,6 +122,10 @@
                     foreach ($resolution in $resolutions.Value)
                     {
                         $resW,$resH = $resolution.Split("x")
+                        if ($resW -eq "Auto")
+                        {
+                            Continue
+                        }
                         $megapixel = [int]$resW * [int]$resH
                         $row = [PSCustomObject]@{
                             Resolution = $resolution
@@ -142,9 +146,10 @@
                     # If the camera has specific framerate values instead of a range, then we need to choose the framerate
                     # that is closest (but smaller than) to the specified framerate.
                     $newFPS = $FPS
-                    if ($null -ne ($cam | Get-VmsCameraStream -WarningAction SilentlyContinue)[0].ValueTypeInfo.fps)
+                    $fpsTypes = ($cam | Get-VmsCameraStream -WarningAction SilentlyContinue)[0].ValueTypeInfo.fps
+                    if ($null -ne $fpsTypes)
                     {
-                        $framerates = ($cam | Get-VmsCameraStream -WarningAction SilentlyContinue)[0].ValueTypeInfo.fps
+                        $framerates = $fpsTypes
                     } else
                     {
                         $framerates = ($cam | Get-VmsCameraStream -WarningAction SilentlyContinue)[0].ValueTypeInfo.framerate
@@ -181,7 +186,6 @@
                         $newFPS = $maxSupportedFramerate
 
                     }
-
 
                     # If there aren't any resolution options, move to the next camera.
                     if ([string]::IsNullOrEmpty($resolutions))
@@ -235,18 +239,15 @@
                         }
                         $totalSupportedStreams[0] | Set-VmsCameraStream -Settings $settings -WarningAction SilentlyContinue
                     }
-                    $allStreams = $cam | Get-VmsCameraStream #| Where-Object Enabled
+                    $allStreams = $cam | Get-VmsCameraStream
 
                     # Disable all streams except for the first one
                     $allStreams[0] | Set-VmsCameraStream -LiveDefault -RecordingTrack Primary
                     for ($i=1;$i -lt $allStreams.length;$i++)
                     {
-                        #if ($i -ge $streamsPerCamera)
-                        #{
-                            $allStreams[$i] | Set-VmsCameraStream -Disabled
-                        #}
+                        $allStreams[$i] | Set-VmsCameraStream -Disabled
                     }
-                    $enabledStreams = $cam | Get-VmsCameraStream | Where-Object Enabled
+                    $enabledStreams = $cam | Get-VmsCameraStream -Enabled
 
                     # Enable additional streams and find appropriate resolution
                     $streamResolution = New-Object System.Collections.Generic.List[PSCustomObject]
@@ -302,7 +303,6 @@
                             {
                                 if ($r.Megapixel -lt $previousStreamResMP)
                                 {
-                                    $selectedRes = $r
                                     $row = [PSCustomObject]@{
                                         'Stream' = $enabledStreams[$k]
                                         'Resolution' = $r.Name
@@ -325,7 +325,6 @@
                                 default  {$settings = @{Resolution = $stream.Resolution;FPS = $newFPS}}
                             }
                             $stream.Stream | Set-VmsCameraStream -Settings $settings
-                            $dumb
                         } elseif ($null -ne $stream.stream.Settings.Framerate)
                         {
                             switch($FPS)
@@ -334,23 +333,24 @@
                                 default  {$settings = @{Resolution = $stream.Resolution;Framerate = $newFPS}}
                             }
                             $stream.Stream | Set-VmsCameraStream -Settings $settings
-                            $dumb
                         } else
                         {
                             $settings = @{
                                 Resolution = $stream.Resolution
                             }
                             $stream.Stream | Set-VmsCameraStream -Settings $settings
-                            $dumb
                         }
                     }
 
-                    $lastStream = $cam | Get-VmsCameraStream | Where-Object Enabled | Select-Object -Last 1
-                    if ($ConfigureAdaptivePlayback)
+                    if (($cam | Get-VmsCameraStream -Enabled).Count -gt 1)
                     {
-                        $lastStream | Set-VmsCameraStream -LiveDefault -RecordingTrack Secondary -PlaybackDefault
-                    } else {
-                        $lastStream | Set-VmsCameraStream -LiveDefault
+                        $lastStream = $cam | Get-VmsCameraStream -Enabled | Select-Object -Last 1
+                        if ($ConfigureAdaptivePlayback)
+                        {
+                            $lastStream | Set-VmsCameraStream -LiveDefault -RecordingTrack Secondary -PlaybackDefault
+                        } else {
+                            $lastStream | Set-VmsCameraStream -LiveDefault
+                        }
                     }
                     $camProcessed++
                 }
