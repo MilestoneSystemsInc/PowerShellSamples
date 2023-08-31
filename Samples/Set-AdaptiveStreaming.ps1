@@ -131,7 +131,7 @@
                         $StreamsPerCamera = $defaultStreamsPerCamera
                     }
 
-                    $resolutions = ($cam | Get-VmsCameraStream -WarningAction SilentlyContinue)[0].ValueTypeInfo.Resolution
+                    $resolutions = $totalSupportedStreams[0].ValueTypeInfo.Resolution
                     $sortedResolutions = New-Object System.Collections.Generic.List[PSCustomObject]
                     foreach ($resolution in $resolutions.Value)
                     {
@@ -160,13 +160,13 @@
                     # If the camera has specific framerate values instead of a range, then we need to choose the framerate
                     # that is closest (but smaller than) to the specified framerate.
                     $newFPS = $FPS
-                    $fpsTypes = ($cam | Get-VmsCameraStream -WarningAction SilentlyContinue)[0].ValueTypeInfo.fps
+                    $fpsTypes = $totalSupportedStreams[0].ValueTypeInfo.fps
                     if ($null -ne $fpsTypes)
                     {
                         $framerates = $fpsTypes
                     } else
                     {
-                        $framerates = ($cam | Get-VmsCameraStream -WarningAction SilentlyContinue)[0].ValueTypeInfo.framerate
+                        $framerates = $totalSupportedStreams[0].ValueTypeInfo.framerate
                     }
 
                     if ($framerates.Name -notcontains "MinValue" -and $framerates.Value -notcontains $FPS)
@@ -209,7 +209,7 @@
                     }
 
                     # Get the max resolution for the first stream
-                    $current = (($cam | Get-VmsCameraStream -WarningAction SilentlyContinue)[0].ValueTypeInfo.Resolution | Where-Object {$_.Name -eq ($cam | Get-VmsCameraStream)[0].Settings.Resolution}).Value
+                    $current = ($totalSupportedStreams[0].ValueTypeInfo.Resolution | Where-Object {$_.Name -eq $totalSupportedStreams[0].Settings.Resolution}).Value
                     if ($resolutions.GetType().Name -eq "String")
                     {
                         $max = $resolutions
@@ -253,10 +253,13 @@
                     $allStreams = $cam | Get-VmsCameraStream
 
                     # Disable all streams except for the first one
-                    $allStreams[0] | Set-VmsCameraStream -LiveDefault -RecordingTrack Primary
+                    $totalSupportedStreams[0] | Set-VmsCameraStream -LiveDefault -RecordingTrack Primary
                     for ($i=1;$i -lt $allStreams.length;$i++)
                     {
-                        $allStreams[$i] | Set-VmsCameraStream -Disabled
+                        if ($allStreams[$i].StreamReferenceId -ne $totalSupportedStreams[0].StreamReferenceId)
+                        {
+                            $allStreams[$i] | Set-VmsCameraStream -Disabled
+                        }
                     }
                     $enabledStreams = $cam | Get-VmsCameraStream -Enabled
 
@@ -267,12 +270,12 @@
                         $extra = 0
                         for ($k=1;$k -lt [int]$StreamsPerCamera+$extra;$k++)
                         {
-                            if ((($cam | Get-VmsCameraStream -WarningAction SilentlyContinue)[$k]).Name -match "JPEG")
+                            if (($totalSupportedStreams[$k]).Name -match "JPEG")
                             {
                                 $extra += 1
                                 Continue
                             }
-                            $streamValueTypeInfo = ($cam | Get-VmsCameraStream -WarningAction SilentlyContinue)[$k].ValueTypeInfo
+                            $streamValueTypeInfo = $totalSupportedStreams[$k].ValueTypeInfo
                             $codecs = $streamValueTypeInfo.Codec
                             if (($codecs.Value -eq 'MJPEG') -eq $true -or ($codecs.Value -eq 'JPEG') -eq $true )
                             {
