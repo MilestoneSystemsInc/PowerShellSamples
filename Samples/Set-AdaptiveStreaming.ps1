@@ -3,14 +3,14 @@
     .SYNOPSIS
         Sets up additional streams for adaptive streaming
     .DESCRIPTION
-        Sets up additional streams for adaptive streaming.  The first stream gets set at maximum resolution and set as the Record stream.
+        Sets up additional streams for adaptive streaming. The first stream gets set at maximum resolution and set as the Primary Record stream.
         Each additional stream gets set at the next lowest resolution that is the same aspect ration as the stream #1.  The last stream
-        (which will be the lowest resolution) is set as the default live stream.
+        (which will be the lowest resolution) is set as the default live stream. If -ConfigureAdaptivePlayback (supported on 2023 R2 and newer) is used,
+        it will also set the lowest resolution stream of the configured live streams to be the Secondary Record stream and also the default playback stream.
 
-        There will be scenarios where this might create a strange
-        configuration such as setting a JPEG only stream as the record stream or making the the lowest resolution stream a JPEG only stream.
-        It also does not set resolutions.  It is recommended to run a Get-VmsCameraReport to at least check if the Record or Default Live
-        streams are configured for MJPEG.
+        There will be scenarios where this might create a strange configuration such as setting a JPEG only stream as the record stream or making the the
+        lowest resolution stream a JPEG only stream. It is recommended to run a Get-VmsCameraReport to at least check if the Record or Default Live streams
+        are configured for MJPEG.
     .EXAMPLE
         Set-AdaptiveStreaming -StreamsPerCamera 3 -FPS 15 -RecordingServerName "*"
 
@@ -27,6 +27,10 @@
         Set-AdaptiveStreaming -StreamsPerCamera 3 -FPS 10 -RecordingServerName "Milestone-Server" -MaxResWidth 3840 -MinResWidth 1921
 
         All cameras that have a maximum resolution width of 3840 and minimum resolution width of 1921 on Recording Server Milestone-Server will be configured with 3 streams and frame rate of 10.
+    .EXAMPLE
+        Set-AdaptiveStreaming -StreamsPerCamera 3 -RecordingServerName * -ConfigurAdaptivePlayback
+
+        Configures up to 3 live streams on each camera on each Recording Server. The -ConfigureAdaptivePlayback also configures a secondary recorded stream on the lowest resolution live stream.
     #>
 
     [CmdletBinding(DefaultParameterSetName='default')]
@@ -112,6 +116,7 @@
                 foreach ($cam in $hw | Get-VmsCamera -EnableFilter Enable -Name $CameraName)
                 {
                     Write-Progress -Activity "Configuring streams for camera $($camProcessed) of $($camQty) (or possibly less)" -PercentComplete ($camProcessed / $camQty * 100)
+
                     $resolutions = ($cam | Get-VmsCameraStream -WarningAction SilentlyContinue)[0].ValueTypeInfo.Resolution
                     $sortedResolutions = New-Object System.Collections.Generic.List[PSCustomObject]
                     foreach ($resolution in $resolutions.Value)
