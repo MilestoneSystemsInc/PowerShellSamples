@@ -28,9 +28,9 @@
 
         All cameras that have a maximum resolution width of 3840 and minimum resolution width of 1921 on Recording Server Milestone-Server will be configured with 3 streams and frame rate of 10.
     .EXAMPLE
-        Set-AdaptiveStreaming -StreamsPerCamera 3 -RecordingServerName * -ConfigurAdaptivePlayback
+        Set-AdaptiveStreaming -StreamsPerCamera 3 -RecordingServerName * -ConfigureAdaptivePlayback
 
-        Configures up to 3 live streams on each camera on each Recording Server. The -ConfigureAdaptivePlayback also configures a secondary recorded stream on the lowest resolution live stream.
+        Configures up to 3 live streams on each camera on each Recording Server. The -ConfigureAdaptivePlayback configures a secondary recorded stream on the lowest resolution live stream and sets it as the default playback stream.
     #>
 
     [CmdletBinding(DefaultParameterSetName='default')]
