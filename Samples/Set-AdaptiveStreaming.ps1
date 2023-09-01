@@ -1,4 +1,6 @@
-﻿function Set-AdaptiveStreaming {
+﻿#Requires -Module @{ ModuleName="MilestonePSTools"; ModuleVersion="23.2.1" }
+
+function Set-AdaptiveStreaming {
     <#
     .SYNOPSIS
         Sets up additional streams for adaptive streaming
