@@ -92,8 +92,8 @@ function Get-VmsCameraPosition {
             Longitude = $long
             "FOV (Degrees)" = $fov
             "Direction (Cardinal)" = $directionCardinal
-            "Direction (Degrees)" = [math]::Round($directionDegrees,2)
-            "Depth (Feet)" = [math]::Round($depth,2)
+            "Direction (Degrees)" = if ($null -ne $directionDegrees) {[math]::Round($directionDegrees,2)} else {$null}
+            "Depth (Feet)" = if ($null -ne $depth) {[math]::Round($depth,2)} else {$null}
         }
         $camInfo.Add($row)
     }
