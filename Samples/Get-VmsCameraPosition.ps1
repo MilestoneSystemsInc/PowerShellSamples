@@ -91,7 +91,7 @@ function Get-VmsCameraPosition {
             Latitude = $lat
             Longitude = $long
             "FOV (Degrees)" = $fov
-            "Direction (Cardinal)" = [math]::Round($directionCardinal,2)
+            "Direction (Cardinal)" = $directionCardinal
             "Direction (Degrees)" = [math]::Round($directionDegrees,2)
             "Depth (Feet)" = [math]::Round($depth,2)
         }
