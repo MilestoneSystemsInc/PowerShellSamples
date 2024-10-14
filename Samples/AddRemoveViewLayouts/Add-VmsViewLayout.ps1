@@ -97,6 +97,34 @@
         Add-VmsViewLayout -ViewLayoutName 'Sample View' -CsvPath 'C:\tmp\layout.csv' -LayoutFolder '16:9' -IconPath 'C:\tmp\view_icon.png'
 
         Adds a new view layout to the 16:9 folder
+    .NOTES
+        The software provided by Milestone Systems, Inc. (hereinafter referred to as "the Software") is provided on
+        an "as is" basis, without any warranties or representations, express or implied, including but not limited to
+        the implied warranties of merchantability, fitness for a particular purpose, or non-infringement.
+        
+        Warranty Disclaimer:
+        The Software is provided without any warranty of any kind, whether expressed or implied. Milestone Systems, Inc.
+        expressly disclaims all warranties, conditions, and representations, including but not limited to warranties of
+        title, non-infringement, merchantability, or fitness for a particular purpose. The entire risk arising out of the
+        use or performance of the Software remains with the user.
+    
+        Support Disclaimer:
+        Milestone Systems, Inc. does not provide any support or maintenance services for the Software. The user acknowledges
+        and agrees that Milestone Systems, Inc. shall have no obligation to provide any updates, bug fixes, or technical
+        support for the Software, whether through telephone, email, or any other means.
+    
+        User Responsibility:
+        The user acknowledges and agrees that they are solely responsible for the selection, installation, use, and results
+        obtained from the Software. Milestone Systems, Inc. shall not be held liable for any errors, defects, or damages arising
+        from the use or inability to use the Software, including but not limited to direct, indirect, incidental, consequential,
+        or special damages.
+    
+        Indemnification:
+        The user agrees to indemnify, defend, and hold harmless Milestone Systems, Inc. and its directors, officers, employees,
+        and agents from any and all claims, liabilities, damages, losses, costs, and expenses (including reasonable attorneys' fees)
+        arising out of or related to the user's use or misuse of the Software.
+
+        By using the Software, the user acknowledges that they have read and understood this clause and agree to be bound by its terms.
     #>
 
     [CmdletBinding()]
