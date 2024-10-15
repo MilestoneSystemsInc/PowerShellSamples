@@ -16,6 +16,8 @@
 
         Removes custom view layout named 'Sample View'
     .EXAMPLE
+        # Connect-Vms only required if not already connected
+        Connect-Vms -ShowDialog -AcceptEula
         Remove-VmsViewLayout -ListCustomLayouts
 
         Returns a list of all custom layouts and which Layout Folder they belong to

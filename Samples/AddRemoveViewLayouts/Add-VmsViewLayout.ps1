@@ -94,6 +94,8 @@
     .PARAMETER Description
         Specify a description of the new view layout. This is optional.
     .EXAMPLE
+        # Connect-Vms only required if not already connected
+        Connect-Vms -ShowDialog -AcceptEula
         Add-VmsViewLayout -ViewLayoutName 'Sample View' -CsvPath 'C:\tmp\layout.csv' -LayoutFolder '16:9' -IconPath 'C:\tmp\view_icon.png'
 
         Adds a new view layout to the 16:9 folder
