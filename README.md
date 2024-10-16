@@ -128,25 +128,42 @@ The script above may look intimidating, and you should _never_ copy and paste co
 <!-- USAGE EXAMPLES -->
 ## Usage
 ### Get connected
-* Connect with the current Windows user
+* If a Milestone connection profile named "default" already exists, a connection will be established to the
+management server address in that connection profile. If no such profile exists, a Milestone login dialog will be
+displayed. The "-AcceptEula" parameter is only required the first time the command is used by the current Windows
+user. If the command is used later under a different Windows user account, the "-AcceptEula" parameter will be
+required one time for that user.
     ```powershell
-    Connect-ManagementServer -Server myvms -AcceptEula
+    Connect-Vms -AcceptEula
     ```
-* Connect with a Windows or Active Directory user
+* If a Milestone connection profile named "MyVMS" already exists, a connection will be established to the management
+server address in that connection profile. If no such profile exists, a Milestone login dialog will be displayed.
+Upon successful logon, the named profile will be saved to disk, and calling 'Connect-Vms -Name MyVMS' in the
+future will automatically connect to the same server address with the same credentials.
     ```powershell
-    Connect-ManagementServer -Server myvms -Credential (Get-Credential) -AcceptEula
+    Connect-Vms -Name 'MyVMS'
     ```
-* Connect with a Milestone Basic User
+* Prompt for a Windows or Active Directory credential, and then establish a connection to http://MyVMS. Upon
+successful connection, a connection profile named "MyVMS" will be added or updated.
     ```powershell
-    Connect-ManagementServer -Server myvms -Credential (Get-Credential) -BasicUser -AcceptEula
+    Connect-Vms -Name 'MyVMS' -ServerAddress 'http://MyVMS' -Credential (Get-Credential)
+    ```
+* Show a Milestone login dialog, and on successful connection, add or update the connection profile named "MyVMS".
+    ```powershell
+    Connect-Vms -Name 'MyVMS' -ShowDialog
+    ```
+* Prompt for a Basic User credential, and then establish a connection to http://MyVMS.
+    ```powershell
+    Connect-Vms -ServerAddress 'http://MyVMS' -Credential (Get-Credential) -BasicUser
     ```
 
 ### List all enabled cameras
 ```powershell
 # Slower but uses Configuration API so each object can be used to modify configuration
-Get-Hardware | Where-Object Enabled | Get-Camera | Where-Object Enabled | Select Name
+Get-VmsCamera | Select Name
 
-# Faster but provides limited access to camera properties and Items cannot be used to modify configuration
+# Faster but provides limited access to camera properties and Items cannot be used to
+# modify configuration
 Get-PlatformItem -Kind (Get-Kind -List | ? DisplayName -eq Camera).Kind | Select Name
 ```
 
@@ -154,18 +171,17 @@ Get-PlatformItem -Kind (Get-Kind -List | ? DisplayName -eq Camera).Kind | Select
 * Using Add-Hardware
     ```powershell
     # Select a Recording Server by name
-    $recorder = Get-RecordingServer -Name Artemis
+    $recorder = Get-VmsRecordingServer -Name Artemis
     
     # Add a StableFPS device (if the driver is installed) using the default hardware name
-    $hardware1 = Add-Hardware -RecordingServer $recorder -Address http://192.168.1.101:1001 -UseDefaultCredentials -DriverId 5000 -GroupPath /StableFPS
+    $hardware1 = Add-VmsHardware -RecordingServer $recorder -HardwareAddress http://192.168.1.101:1001 -Credential (Get-Credential) -DriverNumber 5000
     
-    # Add a camera without specifying the driver, name it 'New Camera' and place it in a Camera Group named 'New Cameras'
-    $hardware2 = Add-Hardware -RecordingServer $recorder -Name 'New Camera' -Address http://192.168.1.102 -UserName root -Password notpass -GroupPath '/New Cameras'
+    # Add a camera without specifying the driver and name it 'New Hardware'
+    $hardware2 = Add-VmsHardware -RecordingServer $recorder -Name 'New Hardware' -Address http://192.168.1.102 -UserName root -Password notpass
     
     # Enable all camera channels on $hardware2
-    foreach ($camera in $hardware2 | Get-Camera) {
-        $camera.Enabled = $true
-        $camera.Save()
+    foreach ($camera in $hardware2 | Get-VmsCamera) {
+        $camera | Set-VmsCamera -Enabled $true
     }
     ```
 * Using Import-HardwareCsv\
@@ -179,12 +195,12 @@ hardware.csv
     
     ```powershell
     $recorder = Get-RecordingServer -Name Artemis
-    Import-HardwareCsv -Path hardware.csv -RecordingServer $recorder
+    Import-VmsHardware -Path hardware.csv -RecordingServer $recorder
     ```
 
-### Save a live snapshot from all cameras
+### Save a live snapshot from all enabled cameras
 ```powershell
-$cameras = Get-Hardware | ? Enabled | Get-Camera | ? Enabled
+$cameras = Get-VmsCamera
 foreach ($camera in $cameras) {
     $null = Get-Snapshot -Camera $camera -Live -Save -Path C:\demo\snapshots -UseFriendlyName -LocalTimestamp
 }
