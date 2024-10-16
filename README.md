@@ -194,7 +194,7 @@ hardware.csv
     ```
     
     ```powershell
-    $recorder = Get-RecordingServer -Name Artemis
+    $recorder = Get-VmsRecordingServer -Name Artemis
     Import-VmsHardware -Path hardware.csv -RecordingServer $recorder
     ```
 
