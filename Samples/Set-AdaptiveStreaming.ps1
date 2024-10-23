@@ -1,4 +1,5 @@
-﻿#Requires -Module @{ ModuleName="MilestonePSTools"; ModuleVersion="23.2.1" }
+﻿#Requires -Module @{ ModuleName="MilestonePSTools"; ModuleVersion="23.2.3" }
+using namespace MilestonePSTools
 
 function Set-AdaptiveStreaming {
     <#
@@ -35,97 +36,87 @@ function Set-AdaptiveStreaming {
         Configures up to 3 live streams on each camera on each Recording Server. The -ConfigureAdaptivePlayback configures a secondary recorded stream on the lowest resolution live stream and sets it as the default playback stream.
     #>
 
-    [CmdletBinding(DefaultParameterSetName='default')]
+    [CmdletBinding(DefaultParameterSetName = 'default')]
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification='Does not change system state')]
+    [RequiresVmsConnection()]
     param (
-        [Parameter(Mandatory=$true)]
-        [ValidateRange(1,3)]
+        [Parameter(Mandatory)]
+        [ValidateRange(1, 3)]
         [string]
         $StreamsPerCamera,
-        [Parameter(Mandatory=$false)]
-        [ValidateRange(1,60)]
+
+        [Parameter()]
+        [ValidateRange(1, 60)]
         $FPS = $null,
-        [Parameter(Mandatory=$true)]
+
+        [Parameter(Mandatory)]
         [string]
         $RecordingServerName,
-        [Parameter(Mandatory=$false)]
+
+        [Parameter()]
         [string]
         $CameraName,
-        [Parameter(Mandatory=$true,ParameterSetName='ResWidth')]
+
+        [Parameter(Mandatory, ParameterSetName = 'ResWidth')]
         $MaxLiveResWidth,
-        [Parameter(Mandatory=$true,ParameterSetName='ResWidth')]
+
+        [Parameter(Mandatory, ParameterSetName = 'ResWidth')]
         $MinLiveResWidth,
-        [Parameter(Mandatory=$false)]
+
+        [Parameter()]
+        [ValidateVmsVersion('23.2')]
         [switch]
         $ConfigureAdaptivePlayback
     )
 
-    begin
-    {
-        $ms = Get-VmsManagementServer
+    begin {
         $recs = Get-VmsRecordingServer -Name $RecordingServerName
-        if ($ConfigureAdaptivePlayback -and [version]$ms.Version -lt [version]"23.2")
-        {
-            Write-Warning "Version $($ms.Version) does not support adaptive playback. Please run again without the -ConfigureAdaptivePlayback switch."
-            Break
-        }
 
-        if ($RecordingServerName -ne "*" -and $recs.Name -notcontains $RecordingServerName)
-        {
-            Write-Warning "Recording Server does not exist.  Please check spelling and try again."
+        if ($RecordingServerName -ne '*' -and $recs.Name -notcontains $RecordingServerName) {
+            Write-Warning 'Recording Server does not exist.  Please check spelling and try again.'
             Return
         }
 
-        if ($null -ne $CameraName -and $null -eq (Get-VmsCamera -Name $CameraName))
-        {
-            Write-Warning "Camera does not exist.  Please check spelling and try again."
+        if ($null -ne $CameraName -and $null -eq (Get-VmsCamera -Name $CameraName)) {
+            Write-Warning 'Camera does not exist.  Please check spelling and try again.'
             Return
         }
 
         $defaultStreamsPerCamera = $StreamsPerCamera
     }
 
-    process
-    {
+    process {
         Clear-VmsCache
         $svc = Get-IServerCommandService
-        $config = $svc.GetConfiguration((Get-Token))
-        if ($RecordingServerName -eq "*")
-        {
-            if ([string]::IsNullOrEmpty($CameraName))
-            {
+        $config = $svc.GetConfiguration((Get-VmsToken))
+        if ($RecordingServerName -eq '*') {
+            if ([string]::IsNullOrEmpty($CameraName)) {
                 $camQty = $config.Recorders.Cameras.Count
             } else {
                 $camQty = 1
             }
-        } else
-        {
-            if ([string]::IsNullOrEmpty($CameraName))
-            {
-                $camQty = ($config.Recorders | Where-Object {$_.Name -eq $RecordingServerName}).Cameras.Count
+        } else {
+            if ([string]::IsNullOrEmpty($CameraName)) {
+                $camQty = ($config.Recorders | Where-Object { $_.Name -eq $RecordingServerName }).Cameras.Count
             } else {
                 $camQty = 1
             }
         }
         $camProcessed = 1
 
-        if ($null -ne $FPS)
-        {
+        if ($null -ne $FPS) {
             [decimal]$FPS = $FPS
         }
 
-        foreach ($rec in $recs)
-        {
-            foreach ($hw in $rec | Get-VmsHardware | Where-Object Enabled)
-            {
-                foreach ($cam in $hw | Get-VmsCamera -EnableFilter Enable -Name $CameraName)
-                {
+        foreach ($rec in $recs) {
+            foreach ($hw in $rec | Get-VmsHardware | Where-Object Enabled) {
+                foreach ($cam in $hw | Get-VmsCamera -EnableFilter Enable -Name $CameraName) {
                     Write-Progress -Activity "Configuring streams for camera $($camProcessed) of $($camQty) (or possibly less)" -PercentComplete ($camProcessed / $camQty * 100)
 
                     # Get all streams that support a codec other than just JPEG/MJPEG
-                    $totalSupportedStreams = $cam | Get-VmsCameraStream -WarningAction SilentlyContinue | Where-Object {$_.ValueTypeInfo.Codec.Value -ne 'JPEG' -and $_.ValueTypeInfo.Codec.Value -ne 'MJPEG'}
+                    $totalSupportedStreams = $cam | Get-VmsCameraStream -WarningAction SilentlyContinue | Where-Object { $_.ValueTypeInfo.Codec.Value -ne 'JPEG' -and $_.ValueTypeInfo.Codec.Value -ne 'MJPEG' }
 
-                    if ($totalSupportedStreams.Count -eq 0)
-                    {
+                    if ($totalSupportedStreams.Count -eq 0) {
                         Continue
                     } elseif ($totalSupportedStreams.Count -lt $StreamsPerCamera) {
                         $StreamsPerCamera = $totalSupportedStreams.Count
@@ -135,26 +126,22 @@ function Set-AdaptiveStreaming {
 
                     $resolutions = $totalSupportedStreams[0].ValueTypeInfo.Resolution
                     $sortedResolutions = New-Object System.Collections.Generic.List[PSCustomObject]
-                    foreach ($resolution in $resolutions.Value)
-                    {
-                        $resW,$resH = $resolution.Split("x")
-                        if ($resW -eq "Auto")
-                        {
+                    foreach ($resolution in $resolutions.Value) {
+                        $resW, $resH = $resolution.Split('x')
+                        if ($resW -eq 'Auto') {
                             Continue
                         }
                         $megapixel = [int]$resW * [int]$resH
                         $row = [PSCustomObject]@{
                             Resolution = $resolution
-                            Megapixel = $megapixel
+                            Megapixel  = $megapixel
                         }
                         $sortedResolutions.Add($row)
                     }
                     $resolutions = ($sortedResolutions | Sort-Object -Property Megapixel -Descending).Resolution
 
-                    if ($null -ne $MaxLiveResWidth -and $null -ne $MinLiveResWidth)
-                    {
-                        if ($resolutions.Split("x")[0] -gt $MaxLiveResWidth -or $resolutions.Split("x")[1] -lt $MinLiveResWidth)
-                        {
+                    if ($null -ne $MaxLiveResWidth -and $null -ne $MinLiveResWidth) {
+                        if ($resolutions.Split('x')[0] -gt $MaxLiveResWidth -or $resolutions.Split('x')[1] -lt $MinLiveResWidth) {
                             Break
                         }
                     }
@@ -163,29 +150,23 @@ function Set-AdaptiveStreaming {
                     # that is closest (but smaller than) to the specified framerate.
                     $newFPS = $FPS
                     $fpsTypes = $totalSupportedStreams[0].ValueTypeInfo.fps
-                    if ($null -ne $fpsTypes)
-                    {
+                    if ($null -ne $fpsTypes) {
                         $framerates = $fpsTypes
-                    } else
-                    {
+                    } else {
                         $framerates = $totalSupportedStreams[0].ValueTypeInfo.framerate
                     }
 
-                    if ($framerates.Name -notcontains "MinValue" -and $framerates.Value -notcontains $FPS)
-                    {
+                    if ($framerates.Name -notcontains 'MinValue' -and $framerates.Value -notcontains $FPS) {
                         $sortedFramerates = @()
-                        foreach ($framerate in $framerates.Value)
-                        {
+                        foreach ($framerate in $framerates.Value) {
                             $sortedFramerates += [decimal]::Parse($framerate)
                         }
 
                         $sortedFramerates = $sortedFramerates | Sort-Object
 
                         $previousFramerate = 0
-                        foreach ($framerate in $sortedFramerates)
-                        {
-                            if ($framerate -gt $FPS)
-                            {
+                        foreach ($framerate in $sortedFramerates) {
+                            if ($framerate -gt $FPS) {
                                 Write-Warning "$($cam.Name) is not capable of $($newFPS). It will be set to $($previousFramerate)."
                                 $newFPS = $previousFramerate
                                 Break
@@ -196,105 +177,90 @@ function Set-AdaptiveStreaming {
 
                     # If the maximum framerate of the camera is less than the framerate specified, then use the maximum framerate of the camera
                     $maxSupportedFramerate = ($framerates.Value | Measure-Object -Maximum).Maximum
-                    if ($newFPS -gt $maxSupportedFramerate -and $null -ne $maxSupportedFramerate)
-                    {
+                    if ($newFPS -gt $maxSupportedFramerate -and $null -ne $maxSupportedFramerate) {
                         Write-Warning "$($cam.Name) is not capable of $($newFPS) FPS. It will be set to its max framerate of $($maxSupportedFramerate) FPS."
                         $newFPS = $maxSupportedFramerate
 
                     }
 
                     # If there aren't any resolution options, move to the next camera.
-                    if ([string]::IsNullOrEmpty($resolutions))
-                    {
+                    if ([string]::IsNullOrEmpty($resolutions)) {
                         $camProcessed++
                         continue
                     }
 
                     # Get the max resolution for the first stream
-                    $current = ($totalSupportedStreams[0].ValueTypeInfo.Resolution | Where-Object {$_.Name -eq $totalSupportedStreams[0].Settings.Resolution}).Value
-                    if ($resolutions.GetType().Name -eq "String")
-                    {
+                    $current = ($totalSupportedStreams[0].ValueTypeInfo.Resolution | Where-Object { $_.Name -eq $totalSupportedStreams[0].Settings.Resolution }).Value
+                    if ($resolutions.GetType().Name -eq 'String') {
                         $max = $resolutions
-                    } else
-                    {
+                    } else {
                         $max = $resolutions[0]
                     }
-                    if ('Auto' -eq $max)
-                    {
+                    if ('Auto' -eq $max) {
                         $camProcessed++
                         continue
                     }
-                    $previousStreamResMP = [int]$max.Split("x")[0] * [int]$max.Split("x")[1]
+                    $previousStreamResMP = [int]$max.Split('x')[0] * [int]$max.Split('x')[1]
 
                     # Get the aspect ratio of the resolution on the first stream
-                    $resW,$resH = $max.Split("x")
+                    $resW, $resH = $max.Split('x')
                     $ratio = $resW / $resH
 
                     # Set Max Resolution on Stream 1 and set framerate if provided
-                    if ($current -ne $resolutions[0].value -and $null -ne $totalSupportedStreams[0].Settings.FPS)
-                    {
-                        switch($FPS)
-                        {
-                            $null    {$settings = @{Resolution = $max}}
-                            default  {$settings = @{Resolution = $max;FPS = $newFPS}}
+                    if ($current -ne $resolutions[0].value -and $null -ne $totalSupportedStreams[0].Settings.FPS) {
+                        switch ($FPS) {
+                            $null { $settings = @{Resolution = $max } }
+                            default { $settings = @{Resolution = $max; FPS = $newFPS } }
                         }
-                        $totalSupportedStreams[0] | Set-VmsCameraStream -Settings $settings -WarningAction SilentlyContinue
+                        $totalSupportedStreams[0] | Set-VmsCameraStream -Settings $settings -WarningAction SilentlyContinue -WhatIf:$WhatIfPreference
                     } elseif ($current -ne $resolutions[0].value -and $null -ne $totalSupportedStreams[0].Settings.Framerate) {
-                        switch($FPS)
-                        {
-                            $null    {$settings = @{Resolution = $max}}
-                            default  {$settings = @{Resolution = $max;Framerate = $newFPS}}
+                        switch ($FPS) {
+                            $null { $settings = @{Resolution = $max } }
+                            default { $settings = @{Resolution = $max; Framerate = $newFPS } }
                         }
-                        $totalSupportedStreams[0] | Set-VmsCameraStream -Settings $settings -WarningAction SilentlyContinue
+                        $totalSupportedStreams[0] | Set-VmsCameraStream -Settings $settings -WarningAction SilentlyContinue -WhatIf:$WhatIfPreference
                     } elseif ($current -ne $resolutions[0].value) {
                         $settings = @{
                             Resolution = $max
                         }
-                        $totalSupportedStreams[0] | Set-VmsCameraStream -Settings $settings -WarningAction SilentlyContinue
+                        $totalSupportedStreams[0] | Set-VmsCameraStream -Settings $settings -WarningAction SilentlyContinue -WhatIf:$WhatIfPreference
                     }
                     $allStreams = $cam | Get-VmsCameraStream
 
                     # Disable all streams except for the first one
-                    $totalSupportedStreams[0] | Set-VmsCameraStream -LiveDefault -RecordingTrack Primary
-                    for ($i=1;$i -lt $allStreams.length;$i++)
-                    {
-                        if ($allStreams[$i].StreamReferenceId -ne $totalSupportedStreams[0].StreamReferenceId)
-                        {
-                            $allStreams[$i] | Set-VmsCameraStream -Disabled
+                    $totalSupportedStreams[0] | Set-VmsCameraStream -LiveDefault -RecordingTrack Primary -WhatIf:$WhatIfPreference
+                    for ($i = 1; $i -lt $allStreams.length; $i++) {
+                        if ($allStreams[$i].StreamReferenceId -ne $totalSupportedStreams[0].StreamReferenceId) {
+                            $allStreams[$i] | Set-VmsCameraStream -Disabled -WhatIf:$WhatIfPreference
                         }
                     }
                     $enabledStreams = $cam | Get-VmsCameraStream -Enabled
 
                     # Enable additional streams and find appropriate resolution
                     $streamResolution = New-Object System.Collections.Generic.List[PSCustomObject]
-                    if ($enabledStreams.length -lt $StreamsPerCamera -and $enabledStreams.length -lt $totalSupportedStreams.Length -and $totalSupportedStreams.length -gt 1)
-                    {
+                    if ($enabledStreams.length -lt $StreamsPerCamera -and $enabledStreams.length -lt $totalSupportedStreams.Length -and $totalSupportedStreams.length -gt 1) {
                         $extra = 0
-                        for ($k=1;$k -lt [int]$StreamsPerCamera+$extra;$k++)
-                        {
-                            if (($totalSupportedStreams[$k]).Name -match "JPEG")
-                            {
+                        for ($k = 1; $k -lt [int]$StreamsPerCamera + $extra; $k++) {
+                            if (($totalSupportedStreams[$k]).Name -match 'JPEG') {
                                 $extra += 1
                                 Continue
                             }
                             $streamValueTypeInfo = $totalSupportedStreams[$k].ValueTypeInfo
                             $codecs = $streamValueTypeInfo.Codec
-                            if (($codecs.Value -eq 'MJPEG') -eq $true -or ($codecs.Value -eq 'JPEG') -eq $true )
-                            {
+                            if (($codecs.Value -eq 'MJPEG') -eq $true -or ($codecs.Value -eq 'JPEG') -eq $true ) {
                                 $extra += 1
                                 Continue
                             }
                             $resolutions = $streamValueTypeInfo.Resolution
-                            
+
                             $sortedResolutions = New-Object System.Collections.Generic.List[PSCustomObject]
-                            foreach ($resolution in $resolutions)
-                            {
-                                $resW,$resH = $resolution.Value.Split("x")
+                            foreach ($resolution in $resolutions) {
+                                $resW, $resH = $resolution.Value.Split('x')
                                 $megapixel = [int]$resW * [int]$resH
                                 $row = [PSCustomObject]@{
-                                    Name = $resolution.Name
+                                    Name       = $resolution.Name
                                     Resolution = $resolution.Value
-                                    Megapixel = $megapixel
+                                    Megapixel  = $megapixel
                                 }
                                 $sortedResolutions.Add($row)
                             }
@@ -302,33 +268,27 @@ function Set-AdaptiveStreaming {
 
                             # Build Camera Res Array for additional streams
                             $camRes = @()
-                            foreach($res in $resolutions)
-                            {
-                                $aresW,$aresH = $res.Resolution.Split("x")
-                                if ($aresW -ne 0 -or $aresH -ne 0)
-                                {
+                            foreach ($res in $resolutions) {
+                                $aresW, $aresH = $res.Resolution.Split('x')
+                                if ($aresW -ne 0 -or $aresH -ne 0) {
                                     $aratio = $aresW / $aresH
                                     $aresW = $aresW -as [int]
-                                    if ($aratio -eq $ratio -And $aresW -le 1920 -And $aresW -ge 320 -and ($aresW -ne 1600 -and $aresH -ne 900) -and ($aresW -ne 1024 -and $aresH -ne 576))
-                                    {
+                                    if ($aratio -eq $ratio -And $aresW -le 1920 -And $aresW -ge 320 -and ($aresW -ne 1600 -and $aresH -ne 900) -and ($aresW -ne 1024 -and $aresH -ne 576)) {
                                         $camRes += $res
                                     }
                                 }
                             }
 
                             # Enabled additional streams
-                            if (-not [string]::IsNullOrEmpty($camRes.Name))
-                            {
-                                $totalSupportedStreams[$k] | Set-VmsCameraStream -LiveMode WhenNeeded
+                            if (-not [string]::IsNullOrEmpty($camRes.Name)) {
+                                $totalSupportedStreams[$k] | Set-VmsCameraStream -LiveMode WhenNeeded -WhatIf:$WhatIfPreference
                                 $enabledStreams = $cam | Get-VmsCameraStream -Enabled
                             }
 
-                            foreach ($r in $camRes)
-                            {
-                                if ($r.Megapixel -lt $previousStreamResMP)
-                                {
+                            foreach ($r in $camRes) {
+                                if ($r.Megapixel -lt $previousStreamResMP) {
                                     $row = [PSCustomObject]@{
-                                        'Stream' = $enabledStreams[$k]
+                                        'Stream'     = $enabledStreams[$k]
                                         'Resolution' = $r.Name
                                     }
                                     $streamResolution.Add($row)
@@ -339,41 +299,33 @@ function Set-AdaptiveStreaming {
                         }
                     }
 
-                    foreach ($stream in $streamResolution)
-                    {
-                        if ($null -ne $stream.stream.Settings.FPS)
-                        {
-                            switch($FPS)
-                            {
-                                $null    {$settings = @{Resolution = $stream.Resolution}}
-                                default  {$settings = @{Resolution = $stream.Resolution;FPS = $newFPS}}
+                    foreach ($stream in $streamResolution) {
+                        if ($null -ne $stream.stream.Settings.FPS) {
+                            switch ($FPS) {
+                                $null { $settings = @{Resolution = $stream.Resolution } }
+                                default { $settings = @{Resolution = $stream.Resolution; FPS = $newFPS } }
                             }
-                            $stream.Stream | Set-VmsCameraStream -Settings $settings
-                        } elseif ($null -ne $stream.stream.Settings.Framerate)
-                        {
-                            switch($FPS)
-                            {
-                                $null    {$settings = @{Resolution = $stream.Resolution}}
-                                default  {$settings = @{Resolution = $stream.Resolution;Framerate = $newFPS}}
+                            $stream.Stream | Set-VmsCameraStream -Settings $settings -WhatIf:$WhatIfPreference
+                        } elseif ($null -ne $stream.stream.Settings.Framerate) {
+                            switch ($FPS) {
+                                $null { $settings = @{Resolution = $stream.Resolution } }
+                                default { $settings = @{Resolution = $stream.Resolution; Framerate = $newFPS } }
                             }
-                            $stream.Stream | Set-VmsCameraStream -Settings $settings
-                        } else
-                        {
+                            $stream.Stream | Set-VmsCameraStream -Settings $settings -WhatIf:$WhatIfPreference
+                        } else {
                             $settings = @{
                                 Resolution = $stream.Resolution
                             }
-                            $stream.Stream | Set-VmsCameraStream -Settings $settings
+                            $stream.Stream | Set-VmsCameraStream -Settings $settings -WhatIf:$WhatIfPreference
                         }
                     }
 
-                    if (($cam | Get-VmsCameraStream -Enabled).Count -gt 1)
-                    {
+                    if (($cam | Get-VmsCameraStream -Enabled).Count -gt 1) {
                         $lastStream = $cam | Get-VmsCameraStream -Enabled | Select-Object -Last 1
-                        if ($ConfigureAdaptivePlayback)
-                        {
-                            $lastStream | Set-VmsCameraStream -LiveDefault -RecordingTrack Secondary -PlaybackDefault
+                        if ($ConfigureAdaptivePlayback) {
+                            $lastStream | Set-VmsCameraStream -LiveDefault -RecordingTrack Secondary -PlaybackDefault -WhatIf:$WhatIfPreference
                         } else {
-                            $lastStream | Set-VmsCameraStream -LiveDefault
+                            $lastStream | Set-VmsCameraStream -LiveDefault -WhatIf:$WhatIfPreference
                         }
                     }
                     $camProcessed++
