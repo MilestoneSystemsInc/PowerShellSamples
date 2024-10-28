@@ -63,24 +63,27 @@ function Test-VmsBestPractices
         Break
     }
 
+    # Ensure a fresh configuration is retrieved
+    Clear-VmsCache
+
     $badPracticeCameraSettings = New-Object System.Collections.Generic.List[PSCustomObject]
-    $recQty = (Get-RecordingServer).count
+    $recs = Get-VmsRecordingServer
 
     $recProcessed = 0
-    foreach ($rec in Get-RecordingServer)
+    foreach ($rec in $recs)
     {
         $svc = $rec | Get-RecorderStatusService2
         $hwProcessed = 0
-        $hwQty = ($rec.HardwareFolder.Hardwares | Where-Object Enabled).count
-        Write-Progress -Activity "Gathering information for Recording Server #$($recProcessed+1) of $($recQty)" -Id 1 -PercentComplete ($recProcessed / $recQty * 100)
-        foreach ($hw in $rec | Get-Hardware | Where-Object Enabled)
+        $hardwares = Get-VmsHardware -RecordingServer $rec | Where-Object Enabled
+        Write-Progress -Activity "Gathering information for Recording Server #$($recProcessed + 1) of $($recs.Count)" -Id 1 -PercentComplete ($recProcessed / $recs.Count * 100)
+        foreach ($hw in $hardwares)
         {
             $camProcessed = 0
-            $camQty = ($hw.CameraFolder.Cameras | Where-Object Enabled).count
-            Write-Progress -Activity "Gathering information for hardware #$($hwProcessed+1) of $($hwQty)" -Id 2 -ParentId 1 -PercentComplete ($hwProcessed / $hwQty * 100)
-            foreach ($cam in $hw | Get-Camera | Where-Object Enabled)
+            $cameras = Get-VmsCamera -Hardware $hw
+            Write-Progress -Activity "Gathering information for hardware #$($hwProcessed + 1) of $($hardwares.Count)" -Id 2 -ParentId 1 -PercentComplete ($hwProcessed / $hardwares.Count * 100)
+            foreach ($cam in $cameras)
             {
-                Write-Progress -Activity "Gathering information for camera #$($camProcessed+1) of $($camQty)" -Id 3 -ParentId 2 -PercentComplete ($camProcessed / $camQty * 100)
+                Write-Progress -Activity "Gathering information for camera #$($camProcessed + 1) of $($cameras.Count)" -Id 3 -ParentId 2 -PercentComplete ($camProcessed / $cameras.Count * 100)
                 $badSetting = $false
                 $motionSettings = $cam.MotionDetectionFolder.MotionDetections
 
@@ -106,8 +109,8 @@ function Test-VmsBestPractices
                 {
                     switch ($motionSettings.DetectionMethod)
                     {
-                        Optimized {$hardwareAcceleratedMotion = "25% --> 12%"}
-                        Normal {$hardwareAcceleratedMotion = "100% --> 12%"}
+                        Optimized {$motionDetectionResolution = "25% --> 12%"}
+                        Normal {$motionDetectionResolution = "100% --> 12%"}
                     }
                     $badSetting = $true
                 }
@@ -115,7 +118,7 @@ function Test-VmsBestPractices
                 # We need to get the stream number for the Record stream
                 # This cycles through until we find the stream number that is set for Record
                 $recordedStream = 0
-                $streamsInfo = $cam.StreamFolder.Streams.streamusagechilditems
+                $streamsInfo = $cam.StreamFolder.Streams.StreamUsageChildItems
                 foreach ($stream in $streamsInfo)
                 {
                     if ($stream.Record -eq $true)
@@ -125,10 +128,11 @@ function Test-VmsBestPractices
                     $recordedStream++
                 }
 
-                $recordingStreamSettings = $cam | Get-CameraSetting -Stream -StreamNumber $recordedStream
+                $streams = $cam | Get-VmsCameraStream -RawValues
+                $recordingStreamValues = $streams | Where-Object {$_.Recorded -eq $true -and $_.PlaybackDefault -eq $true}
                 $keyframesOnly = $motionSettings.KeyframesOnly
-                $maxGOPMode = $recordingStreamSettings.maxGOPMode
-                $zipstreamGOPMode = $recordingStreamSettings.ZGopMode
+                $maxGOPMode = $recordingStreamValues.Settings.MaxGOPMode
+                $zipstreamGOPMode = $recordingStreamValues.Settings.ZGopMode
 
                 # Check if motion on keyframes only is disabled and GOP mode is set to "default"
                 $allFramesDefaultGOP = $null
@@ -162,7 +166,7 @@ function Test-VmsBestPractices
                     $badSetting = $true
                 }
 
-                $camStat = $svc.GetVideoDeviceStatistics((Get-Token),$cam.Id)
+                $camStat = $svc.GetVideoDeviceStatistics((Get-VmsToken),$cam.Id)
                 $streamStats = $camStat.VideoStreamStatisticsArray
 
                 # Check if frame rate of any enabled stream is above, below, or equal to a set value
@@ -220,10 +224,9 @@ function Test-VmsBestPractices
                         }
                     } else
                     {
-                        $streams = $cam | Get-Stream -All
-                        for ($i=0;$i -lt $streams.length;$i++)
+                        for ($i=0;$i -lt $streams.Length;$i++)
                         {
-                            $streamSetting = $cam | Get-CameraSetting -Stream -StreamNumber $i
+                            $streamSetting = $streams[$i].Settings
                             if ([string]::IsNullOrEmpty($streamSetting.FPS) -eq $false)
                             {
                                 $framerate = [math]::Round($streamSetting.FPS,0)
@@ -245,7 +248,7 @@ function Test-VmsBestPractices
                                 $badSetting = $true
                             }
 
-                            if ($null -ne $FPSBelow -and $framerate -gt $FPSBelow)
+                            if ($null -ne $FPSBelow -and $framerate -lt $FPSBelow)
                             {
                                 [string]$FramerateBelow = $framerate
                                 $badSetting = $true
@@ -269,19 +272,19 @@ function Test-VmsBestPractices
                 }
 
                 # Compare current recorded resolution to max available resolution to make sure max resolution is recorded
-                $currentResolution = $recordingStreamSettings.Resolution
+                $currentResolution = $recordingStreamValues.Settings.Resolution
                 if ($null -ne $currentResolution -and $currentResolution -match "\dx\d" -and $hw.Model -notlike "Universal*" -and $hw.Model -notlike "*StableFPS*" -and $hw.Model -notlike "*VideoPush*")
                 {
                     $currentIndexOfX = $currentResolution.IndexOf("x")
                     $currentWidth = [int]$currentResolution.Substring(0,$currentIndexOfX)
-                    $currentHeight = $currentResolution.Substring($currentIndexOfX + 1,$currentResolution.length - $currentIndexOfX - 1)
+                    $currentHeight = $currentResolution.Substring($currentIndexOfX + 1,$currentResolution.Length - $currentIndexOfX - 1)
                     $currentPixelQty = $currentWidth * $currentHeight
-                    $resolutions = $cam | Get-CameraSetting -Stream -StreamNumber $recordedStream -Name Resolution -ValueTypeInfo
+                    $resolutions = $recordingStreamValues.ValueTypeInfo.Resolution
                     foreach ($resolution in $resolutions.Value)
                     {
                         $indexOfX = $resolution.IndexOf("x")
                         $width = [int]$resolution.Substring(0,$indexOfX)
-                        $height = [int]$resolution.Substring($indexOfX + 1,$resolution.length - $indexOfX - 1)
+                        $height = [int]$resolution.Substring($indexOfX + 1,$resolution.Length - $indexOfX - 1)
                         $pixelQty = $width * $height
 
                         $maxResolutionForRecording = $null
@@ -298,19 +301,19 @@ function Test-VmsBestPractices
                 # Note that h.264 and h.265 are considered equally as efficient for the time being.
                 if ($hw.Model -notlike "Universal*" -and $hw.Model -notlike "*StableFPS*" -and $hw.Model -notlike "*VideoPush*")
                 {
-                    $availableCodecs = $cam | Get-CameraSetting -Stream -StreamNumber $recordedStream -Name Codec -ValueTypeInfo
+                    $availableCodecs = $recordingStreamValues.ValueTypeInfo.Codec
                     if ([string]::IsNullOrEmpty($availableCodecs))
                     {
                         $bestRecordingCodec = "No codec data available"
                         $badSetting = $true
                     }
 
-                    if ($recordingStreamSettings.Codec -match "^\d+$" -eq $false)
+                    if ($recordingStreamValues.Settings.Codec -match "^\d+$" -eq $false)
                     {
-                        $codec = $recordingStreamSettings.Codec
+                        $codec = $recordingStreamValues.Settings.Codec
                     } else
                     {
-                        switch ($recordingStreamSettings.Codec)
+                        switch ($recordingStreamValues.Settings.Codec)
                         {
                             '0' {$codec = 'MJPEG'; break}
                             '1' {$codec = 'MPEG4'; break}
@@ -373,7 +376,7 @@ function Test-VmsBestPractices
                 if ((Get-LicenseInfo).DisplayName -like "*Corporate*" -or (Get-LicenseInfo).DisplayName -like "*Expert*" -and $hw.Model -notlike "Universal*" -and $hw.Model -notlike "*StableFPS*" -and $hw.Model -notlike "*VideoPush*")
                 {
                     $adaptiveStreaming = $null
-                    if ($streams.count -lt 2 -and $streamStats.Count -lt 2)
+                    if (($streams | Where-Object Enabled).Count -lt 2 -and $streamStats.Count -lt 2)
                     {
                         $adaptiveStreaming = $false
                         $badSetting = $true
@@ -402,13 +405,13 @@ function Test-VmsBestPractices
                     }
                     $badPracticeCameraSettings.Add($row)
                 }
-                Write-Progress -Activity "Gathering information for camera #$($camProcessed+1) of $($camQty)" -Id 3 -ParentId 2 -PercentComplete ($camProcessed / $camQty * 100)
+                Write-Progress -Activity "Gathering information for camera #$($camProcessed+1) of $($cameras.Count)" -Id 3 -ParentId 2 -PercentComplete ($camProcessed / $cameras.Count * 100)
                 $camProcessed++
             }
-            Write-Progress -Activity "Gathering information for hardware #$($hwProcessed+1) of $($hwQty)" -Id 2 -ParentId 1 -PercentComplete ($hwProcessed / $hwQty * 100)
+            Write-Progress -Activity "Gathering information for hardware #$($hwProcessed+1) of $($hardwares.Count)" -Id 2 -ParentId 1 -PercentComplete ($hwProcessed / $hardwares.Count * 100)
             $hwProcessed++
         }
-        Write-Progress -Activity "Gathering information for Recording Server #$($recProcessed+1) of $($recQty)" -Id 1 -PercentComplete ($recProcessed / $recQty * 100)
+        Write-Progress -Activity "Gathering information for Recording Server #$($recProcessed+1) of $($recs.Count)" -Id 1 -PercentComplete ($recProcessed / $recs.Count * 100)
         $recProcessed++
     }
     $badPracticeCameraSettings
