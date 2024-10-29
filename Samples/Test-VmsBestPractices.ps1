@@ -2,10 +2,13 @@ function Test-VmsBestPractices
 {
     <#
     .SYNOPSIS
-        Finds cameras that have non-default settings that may affect performance or function.
+        Finds cameras that have non-default settings that may affect performance or function. If a field is blank, it means it is following
+        Milestone best practices. Cameras will only be displayed if they have at least one area that isn't following best practices.
 
     .DESCRIPTION
-        Finds cameras that have any of the following settings:
+        Finds cameras that lack any of the following features or have any of the following settings:
+         - No support for HTTPS
+         - Supports HTTPS but HTTPS isn't enabled
          - Motion on keyframes disabled unless custom GOP or Dynamic GOP is enabled
          - Custom GOP on record stream unless Motion on keyframes is disabled
          - Dynamic GOP on record stream on Axis cameras unless Motion on keyframes is disabled
@@ -78,13 +81,29 @@ function Test-VmsBestPractices
         Write-Progress -Activity "Gathering information for Recording Server #$($recProcessed + 1) of $($recs.Count)" -Id 1 -PercentComplete ($recProcessed / $recs.Count * 100)
         foreach ($hw in $hardwares)
         {
+            Write-Progress -Activity "Gathering information for hardware #$($hwProcessed + 1) of $($hardwares.Count)" -Id 2 -ParentId 1 -PercentComplete ($hwProcessed / $hardwares.Count * 100)
+            $badHardwareSetting = $false
+            # Check if camera supports HTTPS and, if so, is it enabled
+            $hwSettings = $hw | Get-HardwareSetting
+            if ($null -eq $hwSettings.HTTPSEnabled) {
+                $httpsSupported = $false
+                $httpsEnabled = $null
+                $badHardwareSetting = $true
+            } elseif ($hwSettings.HTTPSEnabled -eq 'no') {
+                $httpsSupported = $null
+                $httpsEnabled = $false
+                $badHardwareSetting = $true
+            } else {
+                $httpsSupported = $null
+                $httpsEnabled = $null
+            }
+
             $camProcessed = 0
             $cameras = Get-VmsCamera -Hardware $hw
-            Write-Progress -Activity "Gathering information for hardware #$($hwProcessed + 1) of $($hardwares.Count)" -Id 2 -ParentId 1 -PercentComplete ($hwProcessed / $hardwares.Count * 100)
             foreach ($cam in $cameras)
             {
                 Write-Progress -Activity "Gathering information for camera #$($camProcessed + 1) of $($cameras.Count)" -Id 3 -ParentId 2 -PercentComplete ($camProcessed / $cameras.Count * 100)
-                $badSetting = $false
+                $badCameraSetting = $false
                 $motionSettings = $cam.MotionDetectionFolder.MotionDetections
 
                 # Check if Generate Motion Metadata is disabled
@@ -92,7 +111,7 @@ function Test-VmsBestPractices
                 if ($motionSettings.GenerateMotionMetadata -eq $false)
                 {
                     $generateMotionMetadata = $motionSettings.GenerateMotionMetadata
-                    $badSetting = $true
+                    $badCameraSetting = $true
                 }
 
                 # Check if Hardware Accelerated Motion is set to Off
@@ -100,7 +119,7 @@ function Test-VmsBestPractices
                 if ($motionSettings.HardwareAccelerationMode -eq "Off")
                 {
                     $hardwareAcceleratedMotion = $motionSettings.HardwareAccelerationMode
-                    $badSetting = $true
+                    $badCameraSetting = $true
                 }
 
                 # Check if "Detection resolution" is set to Optimized (25%) or Normal (100%) instead of Fast (12%)
@@ -112,7 +131,7 @@ function Test-VmsBestPractices
                         Optimized {$motionDetectionResolution = "25% --> 12%"}
                         Normal {$motionDetectionResolution = "100% --> 12%"}
                     }
-                    $badSetting = $true
+                    $badCameraSetting = $true
                 }
 
                 # We need to get the stream number for the Record stream
@@ -139,7 +158,7 @@ function Test-VmsBestPractices
                 if ($keyframesOnly -eq $false -and $maxGOPMode -eq "default")
                 {
                     $allFramesDefaultGOP = $true
-                    $badSetting = $true
+                    $badCameraSetting = $true
                 }
 
                 # Check if motion on keyframes only is enabled and GOP mode is set to "custom"
@@ -147,7 +166,7 @@ function Test-VmsBestPractices
                 if ($keyframesOnly -eq $true -and $maxGOPMode -eq "custom")
                 {
                     $keyframesCustomGOP = $true
-                    $badSetting = $true
+                    $badCameraSetting = $true
                 }
 
                 # Check if motion on keyframes only is disabled and Zipstream GOP Mode is set to Fixed
@@ -155,7 +174,7 @@ function Test-VmsBestPractices
                 if ($keyframesOnly -eq $false -and $zipstreamGOPMode -eq "fixed")
                 {
                     $allFramesZipstreamFixedGOP = $true
-                    $badSetting = $true
+                    $badCameraSetting = $true
                 }
 
                 # Check if motion on keyframes only is enabled and Zipstream GOP Mode is set to Dynamic
@@ -163,7 +182,7 @@ function Test-VmsBestPractices
                 if ($keyframesOnly -eq $true -and $zipstreamGOPMode -eq "dynamic")
                 {
                     $keyframesZipstreamDynamicGOP = $true
-                    $badSetting = $true
+                    $badCameraSetting = $true
                 }
 
                 $camStat = $svc.GetVideoDeviceStatistics((Get-VmsToken),$cam.Id)
@@ -195,31 +214,31 @@ function Test-VmsBestPractices
                             if ($null -ne $FPSAbove -and $framerate -gt $FPSAbove)
                             {
                                 [string]$FramerateAbove = $framerate
-                                $badSetting = $true
+                                $badCameraSetting = $true
                             } elseif ($null -ne $FPSAbove -and $null -eq $framerate)
                             {
                                 $FramerateAbove = "No framerate data available"
-                                $badSetting = $true
+                                $badCameraSetting = $true
                             }
 
                             if ($null -ne $FPSBelow -and $framerate -lt $FPSBelow)
                             {
                                 [string]$FramerateBelow = $framerate
-                                $badSetting = $true
+                                $badCameraSetting = $true
                             } elseif ($null -ne $FPSBelow -and $null -eq $framerate)
                             {
                                 $FramerateBelow = "No framerate data available"
-                                $badSetting = $true
+                                $badCameraSetting = $true
                             }
 
                             if ($null -ne $FPSNotEqualTo -and $framerate -ne $FPSNotEqualTo)
                             {
                                 [string]$FramerateNotEqualTo = $framerate
-                                $badSetting = $true
+                                $badCameraSetting = $true
                             } elseif ($null -ne $FPSNotEqualTo -and $null -eq $framerate)
                             {
                                 $FramerateNotEqualTo = "No framerate data available"
-                                $badSetting = $true
+                                $badCameraSetting = $true
                             }
                         }
                     } else
@@ -241,31 +260,31 @@ function Test-VmsBestPractices
                             if ($null -ne $FPSAbove -and $framerate -gt $FPSAbove)
                             {
                                 [string]$FramerateAbove = $framerate
-                                $badSetting = $true
+                                $badCameraSetting = $true
                             } elseif ($null -ne $FPSAbove -and $null -eq $framerate)
                             {
                                 $FramerateAbove = "No framerate data available"
-                                $badSetting = $true
+                                $badCameraSetting = $true
                             }
 
                             if ($null -ne $FPSBelow -and $framerate -lt $FPSBelow)
                             {
                                 [string]$FramerateBelow = $framerate
-                                $badSetting = $true
+                                $badCameraSetting = $true
                             } elseif ($null -ne $FPSBelow -and $null -eq $framerate)
                             {
                                 $FramerateBelow = "No framerate data available"
-                                $badSetting = $true
+                                $badCameraSetting = $true
                             }
 
                             if ($null -ne $FPSNotEqualTo -and $framerate -gt $FPSNotEqualTo)
                             {
                                 [string]$FramerateNotEqualTo = $framerate
-                                $badSetting = $true
+                                $badCameraSetting = $true
                             } elseif ($null -ne $FPSNotEqualTo -and $null -eq $framerate)
                             {
                                 $FramerateNotEqualTo = "No framerate data available"
-                                $badSetting = $true
+                                $badCameraSetting = $true
                             }
                         }
                     }
@@ -291,7 +310,7 @@ function Test-VmsBestPractices
                         if ($pixelQty -gt $currentPixelQty)
                         {
                             $maxResolutionForRecording = "$($currentResolution) --> $($resolution)"
-                            $badSetting = $true
+                            $badCameraSetting = $true
                             Break
                         }
                     }
@@ -305,7 +324,7 @@ function Test-VmsBestPractices
                     if ([string]::IsNullOrEmpty($availableCodecs))
                     {
                         $bestRecordingCodec = "No codec data available"
-                        $badSetting = $true
+                        $badCameraSetting = $true
                     }
 
                     if ($recordingStreamValues.Settings.Codec -match "^\d+$" -eq $false)
@@ -366,7 +385,7 @@ function Test-VmsBestPractices
                         if ($recordingCodec -gt $codecType)
                         {
                             $bestRecordingCodec = "$($codec) --> $($availableCodec.Value)"
-                            $badSetting = $true
+                            $badCameraSetting = $true
                             Break
                         }
                     }
@@ -379,15 +398,17 @@ function Test-VmsBestPractices
                     if (($streams | Where-Object Enabled).Count -lt 2 -and $streamStats.Count -lt 2)
                     {
                         $adaptiveStreaming = $false
-                        $badSetting = $true
+                        $badCameraSetting = $true
                     }
                 }
 
-                if ($badSetting -eq $true)
+                if ($badHardwareSetting -eq $true -or $badCameraSetting -eq $true)
                 {
                     $row = [PSCustomObject]@{
                         "RecordingServer" = $rec.Name
                         "HardwareName" = $hw.Name
+                        "HTTPS_Supported" = $httpsSupported
+                        "HTTPS_Enabled" = $httpsEnabled
                         "CameraName" = $cam.Name
                         "VMDAllFrames - DefaultGOP" = $allFramesDefaultGOP
                         "KeyframesVMD - CustomGOP" = $keyframesCustomGOP
@@ -405,13 +426,13 @@ function Test-VmsBestPractices
                     }
                     $badPracticeCameraSettings.Add($row)
                 }
-                Write-Progress -Activity "Gathering information for camera #$($camProcessed+1) of $($cameras.Count)" -Id 3 -ParentId 2 -PercentComplete ($camProcessed / $cameras.Count * 100)
+                Write-Progress -Activity "Gathering information for camera #$($camProcessed + 1) of $($cameras.Count)" -Id 3 -ParentId 2 -PercentComplete ($camProcessed / $cameras.Count * 100)
                 $camProcessed++
             }
-            Write-Progress -Activity "Gathering information for hardware #$($hwProcessed+1) of $($hardwares.Count)" -Id 2 -ParentId 1 -PercentComplete ($hwProcessed / $hardwares.Count * 100)
+            Write-Progress -Activity "Gathering information for hardware #$($hwProcessed + 1) of $($hardwares.Count)" -Id 2 -ParentId 1 -PercentComplete ($hwProcessed / $hardwares.Count * 100)
             $hwProcessed++
         }
-        Write-Progress -Activity "Gathering information for Recording Server #$($recProcessed+1) of $($recs.Count)" -Id 1 -PercentComplete ($recProcessed / $recs.Count * 100)
+        Write-Progress -Activity "Gathering information for Recording Server #$($recProcessed + 1) of $($recs.Count)" -Id 1 -PercentComplete ($recProcessed / $recs.Count * 100)
         $recProcessed++
     }
     $badPracticeCameraSettings
