@@ -30,7 +30,7 @@ function Get-UsersInRoles {
 
     process {
         $resultFound = $false
-        foreach ($role in Get-Role -Name $RoleName)
+        foreach ($role in Get-VmsRole -Name $RoleName)
         {
             $resultFound = $true
             foreach ($user in $role.UserFolder.Users)
