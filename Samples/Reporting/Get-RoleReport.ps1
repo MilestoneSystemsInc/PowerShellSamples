@@ -31,8 +31,8 @@ function Get-RoleReport {
     )
 
     process {
-        $roles = Get-Role -Name $RoleName -ErrorAction Stop | Where-Object RoleType -eq UserDefined
-        $cameras = Get-Hardware | Where-Object Enabled | Get-Camera | Where-Object Enabled
+        $roles = Get-VmsRole -Name $RoleName -ErrorAction Stop | Where-Object RoleType -eq UserDefined
+        $cameras = Get-VmsCamera
         if ($null -eq $roles -or $roles.Count -eq 0) {
             Write-Error "Cannot find user-defined role '$RoleName' because it does not exist."
         }

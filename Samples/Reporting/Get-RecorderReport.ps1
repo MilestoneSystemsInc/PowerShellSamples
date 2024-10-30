@@ -17,8 +17,8 @@ function Get-RecorderReport {
                 [VideoOS.Platform.ConfigurationItems.RecordingServer]$Recorder
             )
             try {
-                $hardware = $recorder | Get-Hardware
-                $cameras = $hardware | Get-Camera
+                $hardware = $recorder | Get-VmsHardware
+                $cameras = $hardware | Get-VmsCamera -EnableFilter All
                 $enabledHardware = $hardware | Where-Object Enabled
                 $enabledCameras = $cameras | Where-Object { $_.Enabled -and $_.ParentItemPath -in $enabledHardware.Path }
 
@@ -42,8 +42,8 @@ function Get-RecorderReport {
 
                 try {
                     $svc = $recorder | Get-RecorderStatusService2
-                    $stats = $svc.GetVideoDeviceStatistics((Get-Token), [guid[]]$enabledCameras.Id)
-                    $status = $svc.GetCurrentDeviceStatus((Get-Token), [guid[]]$enabledCameras.Id)
+                    $stats = $svc.GetVideoDeviceStatistics((Get-VmsToken), [guid[]]$enabledCameras.Id)
+                    $status = $svc.GetCurrentDeviceStatus((Get-VmsToken), [guid[]]$enabledCameras.Id)
                     $liveStreams = $stats.VideoStreamStatisticsArray | Where-Object RecordingStream -eq $false
                     $recordedStreams = $stats.VideoStreamStatisticsArray | Where-Object RecordingStream
                     $recordedBPS = $recordedStreams | Measure-Object -Property BPS -Sum | Select-Object -ExpandProperty Sum
@@ -83,7 +83,7 @@ function Get-RecorderReport {
         }
 
         if ($null -eq $RecordingServer) {
-            $RecordingServer = Get-RecordingServer
+            $RecordingServer = Get-VmsRecordingServer
         }
 
         try {
