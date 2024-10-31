@@ -21,10 +21,8 @@ function Get-RecorderProperties {
     )
 
     $serverInfo = New-Object System.Collections.Generic.List[PSCustomObject]
-    $recs = Get-RecordingServer
+    $recs = Get-VmsRecordingServer
     $failoverRecs = (Get-VmsFailoverGroup).FailoverRecorderFolder.FailoverRecorders
-    $servers = @($recs,$failoverRecs)
-    $hostnames = $servers.hostname
 
     foreach ($rec in $recs)
     {
@@ -52,14 +50,7 @@ function Get-RecorderProperties {
 
             [Parameter()]
             [ValidateNotNullOrEmpty()]
-            [string]$ComputerName = $env:COMPUTERNAME,
-
-            [Parameter()]
-            [ValidateNotNullOrEmpty()]
-            [string]$Name,
-
-            [Parameter()]
-            [guid]$Guid
+            [string]$ComputerName = $env:COMPUTERNAME
         )
         process {
             try {
@@ -77,20 +68,14 @@ function Get-RecorderProperties {
                     if (-not $UninstallKeys) {
                         Write-Warning -Message 'No software registry keys found'
                     } else {
-                        foreach ($UninstallKey in $UninstallKeys | Where-Object {$_.Name -like "*Milestone*" -or $_.Name -like "*XProtect*"} ) {
+                        foreach ($UninstallKey in $UninstallKeys){
                             $friendlyNames = @{
                                 'DisplayName'    = 'Name'
                                 'DisplayVersion' = 'Version'
                             }
                             Write-Verbose -Message "Checking uninstall key [$($UninstallKey)]"
-                            if ($Name) {
-                                $WhereBlock = { $_.GetValue('DisplayName') -like "$Name*" }
-                            } elseif ($GUID) {
-                                $WhereBlock = { $_.PsChildName -eq $Guid.Guid }
-                            } else {
-                                $WhereBlock = { $_.GetValue('DisplayName') }
-                            }
-                            $SwKeys = Get-ChildItem -Path $UninstallKey -ErrorAction SilentlyContinue | Where-Object $WhereBlock
+                            
+                            $SwKeys = Get-ChildItem -Path $UninstallKey -ErrorAction SilentlyContinue | Where-Object { $_.GetValue('DisplayName') -like "Milestone*" -or $_.GetValue('DisplayName') -like "*XProtect*" }
                             if (-not $SwKeys) {
                                 Write-Verbose -Message "No software keys in uninstall key $UninstallKey"
                             } else {
@@ -128,21 +113,36 @@ function Get-RecorderProperties {
                 } else {
                     Invoke-Command -ComputerName $ComputerName -ScriptBlock $scriptBlock -ArgumentList $PSBoundParameters
                 }
-
-                if ($null -eq (get-service | Where-Object {$_.Name -eq "Milestone XProtect Failover Server"}))
-                {
-                    $rsType = "Primary"
-                } else
-                {
-                    $rsType = "Failover"
-                }
             } catch {
                 Write-Error -Message "Error: $($_.Exception.Message) - Line Number: $($_.InvocationInfo.ScriptLineNumber)"
             }
         }
     }
-    $milestoneSoftware = Get-InstalledSoftware -ComputerName $hostnames | Where-Object {$_.Name -like "*Milestone*" -or $_.Name -like "*XProtect*"}
 
+    $rsInfo = New-Object System.Collections.Generic.List[PSCustomObject]
+    foreach ($server in $serverInfo) {
+        $milestoneSoftware = Get-InstalledMilestoneSoftware -ComputerName $server.Hostname
+        $dpVersion, $hotfixVersion, $legacyDPVersion = $null
+        
+        foreach ($entry in $milestoneSoftware) {
+            if ($entry.Name -like "*XProtect*Device Pack*" -and $entry.Name -notlike "*Legacy*") {
+                $dpVersion = $entry.Version
+            } elseif ($entry.Name -like "Milestone.Hotfix*") {
+                $hotfixVersion = $entry.Version
+            } elseif ($entry.Name -like "*XProtect*Legacy Device*") {
+                $legacyDPVersion = $entry.Version
+            }
+        }
+
+        $row = [PSCustomObject]@{
+            'RecorderHostname' = $server.Hostname
+            'DevicePackVersion' = $dpVersion
+            'LegacyDPVersion' = $legacyDPVersion
+            'HotfixVersion' = $hotfixVersion
+            'Type' = $server.Type
+        }
+        $rsInfo.Add($row)
+    }
 
     if ($AddToDescription)
     {
@@ -155,9 +155,9 @@ function Get-RecorderProperties {
             $rsDescriptionHotfix = "`r`nHotfix Version = $($rs.HotfixVersion)"
             $rsDescription = $rsDescriptionDate + $rsDescriptionDP + $rsDescriptionLegacy + $rsDescriptionHotfix
 
-            if ($null -ne (Get-RecordingServer -Hostname $rs.RecorderHostname -ErrorAction SilentlyContinue))
+            if ($null -ne (Get-VmsRecordingServer -HostName $rs.RecorderHostname -ErrorAction SilentlyContinue))
             {
-                $recObject = Get-RecordingServer -Hostname $rs.RecorderHostname
+                $recObject = Get-VmsRecordingServer -HostName $rs.RecorderHostname
             }
             else
             {
