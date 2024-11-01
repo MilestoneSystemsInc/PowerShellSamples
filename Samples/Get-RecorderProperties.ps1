@@ -22,7 +22,7 @@ function Get-RecorderProperties {
 
     $serverInfo = New-Object System.Collections.Generic.List[PSCustomObject]
     $recs = Get-VmsRecordingServer
-    $failoverRecs = (Get-VmsFailoverGroup).FailoverRecorderFolder.FailoverRecorders
+    $failoverRecs = Get-VmsFailoverRecorder -Recurse
 
     foreach ($rec in $recs)
     {
@@ -119,61 +119,64 @@ function Get-RecorderProperties {
         }
     }
 
+    $serverIndex = 0
     $rsInfo = New-Object System.Collections.Generic.List[PSCustomObject]
     foreach ($server in $serverInfo) {
-        $milestoneSoftware = Get-InstalledMilestoneSoftware -ComputerName $server.Hostname
-        $dpVersion, $hotfixVersion, $legacyDPVersion = $null
-        
-        foreach ($entry in $milestoneSoftware) {
-            if ($entry.Name -like "*XProtect*Device Pack*" -and $entry.Name -notlike "*Legacy*") {
-                $dpVersion = $entry.Version
-            } elseif ($entry.Name -like "Milestone.Hotfix*") {
-                $hotfixVersion = $entry.Version
-            } elseif ($entry.Name -like "*XProtect*Legacy Device*") {
-                $legacyDPVersion = $entry.Version
+        Write-Progress -Activity "Getting info for $($server.Hostname)" -PercentComplete ($serverIndex / $serverInfo.Count * 100)
+        if ([bool](Invoke-Command -ComputerName $server.Hostname -ScriptBlock {$env:COMPUTERNAME} -ErrorAction SilentlyContinue)) {
+            $milestoneSoftware = Get-InstalledMilestoneSoftware -ComputerName $server.Hostname
+            $dpVersion, $hotfixVersion, $legacyDPVersion = $null
+            
+            foreach ($entry in $milestoneSoftware) {
+                if ($entry.Name -like "*XProtect*Device Pack*" -and $entry.Name -notlike "*Legacy*") {
+                    $dpVersion = $entry.Version
+                } elseif ($entry.Name -like "Milestone.Hotfix*") {
+                    $hotfixVersion = $entry.Version
+                } elseif ($entry.Name -like "*XProtect*Legacy Device*") {
+                    $legacyDPVersion = $entry.Version
+                }
             }
-        }
 
-        $row = [PSCustomObject]@{
-            'RecorderHostname' = $server.Hostname
-            'DevicePackVersion' = $dpVersion
-            'LegacyDPVersion' = $legacyDPVersion
-            'HotfixVersion' = $hotfixVersion
-            'Type' = $server.Type
+            $row = [PSCustomObject]@{
+                'RecorderHostname' = $server.Hostname
+                'DevicePackVersion' = $dpVersion
+                'LegacyDPVersion' = $legacyDPVersion
+                'HotfixVersion' = $hotfixVersion
+                'Type' = $server.Type
+            }
+            $rsInfo.Add($row)
+        } else {
+            Write-Warning "Unable to remotely access Recording Server $($server.HostName). It will be skipped."
         }
-        $rsInfo.Add($row)
+        $serverIndex++
     }
+    Write-Progress -Activity "Getting info for $($server.Hostname)" -Completed
 
     if ($AddToDescription)
     {
         $datetime = Get-Date
+        $serverIndex = 0
         foreach ($rs in $rsInfo)
         {
+            Write-Progress "Adding collected information to Description field of $($rs.RecorderHostname)" -PercentComplete ($serverIndex / $rsInfo.Count * 100)
             $rsDescriptionDate = "Last Updated = $($datetime)"
             $rsDescriptionDP = "`r`nDevice Pack Version = $($rs.DevicePackVersion)"
             $rsDescriptionLegacy = "`r`nLegacy Device Pack Version = $($rs.LegacyDPVersion)"
             $rsDescriptionHotfix = "`r`nHotfix Version = $($rs.HotfixVersion)"
             $rsDescription = $rsDescriptionDate + $rsDescriptionDP + $rsDescriptionLegacy + $rsDescriptionHotfix
 
-            if ($null -ne (Get-VmsRecordingServer -HostName $rs.RecorderHostname -ErrorAction SilentlyContinue))
-            {
-                $recObject = Get-VmsRecordingServer -HostName $rs.RecorderHostname
+            if ($rs.Type -eq 'Primary') {
+                $recObject = $recs | Where-Object {$_.HostName -eq $rs.RecorderHostname}
+            } elseif ($rs.Type -eq 'Failover') {
+                $recObject = $failoverRecs | Where-Object {$_.HostName -eq $rs.RecorderHostname}
             }
-            else
-            {
-                $recObject = (Get-VmsFailoverGroup).FailoverRecorderFolder.FailoverRecorders | Where-Object {$_.Hostname -eq $rs.RecorderHostname}
-            }
-            $r = Get-ConfigurationItem -Path $recObject.Path
-            $description = $r.Properties | Where-Object Key -eq "Description"
-            $description.Value = $rsDescription
-            $multicastAddress = $r.Properties | Where-Object Key -eq "MulticastServerAddress"
-            if ([string]::IsNullOrEmpty($multicastAddress.Value))
-            {
-                $multicastAddress.Value = "0.0.0.0"
-            }
-            $null = $r | Set-ConfigurationItem
 
+            $recObject.Description = $rsDescription
+            $recObject.Save()
+
+            $serverIndex++
         }
+        Write-Progress "Adding collected information to Description field of $($rs.RecorderHostname)" -Completed
     }
     else
     {
