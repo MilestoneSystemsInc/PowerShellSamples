@@ -1,18 +1,23 @@
 function Get-RecorderProperties {
     <#
     .SYNOPSIS
-        Gets the Device Pack and Hotfix version on the Recording Servers
+        Gets the Device Pack and Hotfix version on the Recording Servers and Failover Recording Servers.
     .DESCRIPTION
-        Gets the Device Pack and Hotfix version on the Recording Servers.  If specified, it will add that information into the Description field of each Recording Server.
+        Gets the Device Pack and Hotfix version on the Recording Servers and Failover Recording Servers. If specified, it will add that
+        information into the Description field of each Recording Server.
+
+        This requires an environment that supports PSRemoting.
     .EXAMPLE
         PS C:\> Get-RecorderProperites | Out-GridView
 
-        Displays the hostname, Device Pack version, Legacy Device Pack version (if installed), Hotfix version (if installed) and whether the recorder is a Primary or Failover.
+        Displays the hostname, Device Pack version, Legacy Device Pack version (if installed), Hotfix version (if installed) and whether
+        the recorder is a Primary or Failover.
     .EXAMPLE
         PS C:\> Get-RecorderProperties -AddToDescription
 
-        Collects the Device Pack version, Legacy Device Pack version (if installed), Hotfix version (if installed) and adds them to the Description in the Management Client of each Recording Server.
-        This will delete anything that is currently written in the Description field for the Recording Server.
+        Collects the Device Pack version, Legacy Device Pack version (if installed), Hotfix version (if installed) and adds them to the
+        Description in the Management Client of each Recording Server. This will delete anything that is currently written in the Description
+        field for the Recording Server.
     #>
     [CmdletBinding()]
     param (
