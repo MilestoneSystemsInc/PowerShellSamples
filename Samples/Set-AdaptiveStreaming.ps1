@@ -109,7 +109,7 @@ function Set-AdaptiveStreaming {
         }
 
         foreach ($rec in $recs) {
-            foreach ($hw in $rec | Get-VmsHardware | Where-Object Enabled) {
+            foreach ($hw in $rec | Get-VmsHardware | Where-Object {$_.Enabled -and $_.Model -notlike "Universal*ChAdv" -and $_.Model -notlike "StableFPS*"}) {
                 foreach ($cam in $hw | Get-VmsCamera -EnableFilter Enable -Name $CameraName) {
                     Write-Progress -Activity "Configuring streams for camera $($camProcessed) of $($camQty) (or possibly less)" -PercentComplete ($camProcessed / $camQty * 100)
 
